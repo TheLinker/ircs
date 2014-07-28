@@ -33,7 +33,7 @@ type User struct {
 
 var Users *list.List
 
-func interpretar_comando(message string, c *User) {
+func parseCommand(message string, u *User) {
 	var prefix, command, argv string
 
 	if len(message) == 0 {
@@ -55,16 +55,14 @@ func interpretar_comando(message string, c *User) {
 
 	log.Printf("%q %q %q\n", prefix, command, argv)
 
-	handler, ok := Mess_handlers[command]
-
+	handler, ok := CommandHandlers[command]
 	if ok {
-		handler(c, prefix, argv)
+		handler(u, prefix, argv)
 	}
-
 }
 
-func listenClient(c *User) {
-	r := bufio.NewReader(c.conn)
+func listenClient(u *User) {
+	r := bufio.NewReader(u.conn)
 	for {
 		line, err := r.ReadBytes('\n')
 		if err != nil {
@@ -74,7 +72,7 @@ func listenClient(c *User) {
 
 		message := strings.TrimRight(string(line), "\r\n")
 		log.Print("<- " + message)
-		interpretar_comando(message, c)
+		parseCommand(message, u)
 	}
 }
 
@@ -82,20 +80,20 @@ func sendtoChannel(c *Channel) {
 	for {
 		msg := <-c.out
 
-		for e := c.users.Front(); e != nil; e = e.Next() {
-			if msg.nickname != e.Value.(*User).nickname {
-				e.Value.(*User).out <- msg.msg
+		for u := c.users.Front(); u != nil; u = u.Next() {
+			if msg.nickname != u.Value.(*User).nickname {
+				u.Value.(*User).out <- msg.msg
 			}
 		}
 	}
 }
 
-func sendtoClient(c *User) {
+func sendtoClient(u *User) {
 	for {
-		message := <-c.out
+		message := <-u.out
 		message += "\r\n"
 		log.Print("-> " + message)
-		c.conn.Write([]byte(message))
+		u.conn.Write([]byte(message))
 	}
 }
 
