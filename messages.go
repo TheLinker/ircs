@@ -19,7 +19,7 @@ var CommandHandlers = map[string]func(c *User, prefix string, args string){
 func NickHandler(u *User, prefix string, args string) {
 	//por ahora lo aceptamos sin mas comprobacion
 	u.nickname = args
-	log.Print(u.nickname)
+	log.Println(u.nickname)
 	u.out <- fmt.Sprintf("NOTICE * :Welcome %s", u.nickname)
 }
 
@@ -32,10 +32,10 @@ func UserHandler(u *User, prefix string, args string) {
 	u.username = argv[0]
 	u.realname = strings.Trim(argv[3], " :")
 
-	log.Print(u.conn.RemoteAddr().String())
+	log.Println(u.conn.RemoteAddr().String())
 	host, err := net.LookupAddr(u.conn.RemoteAddr().String())
 	if err != nil {
-		log.Print(err)
+		log.Println(err)
 		u.hostname = "localhost"
 	} else {
 		u.hostname = host[0]

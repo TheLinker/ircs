@@ -66,20 +66,18 @@ func listenClient(u *User) {
 	for {
 		line, err := r.ReadBytes('\n')
 		if err != nil {
-			log.Print(err)
+			log.Println(err)
 			break
 		}
 
 		message := strings.TrimRight(string(line), "\r\n")
-		log.Print("<- " + message)
+		log.Println("<- " + message)
 		parseCommand(message, u)
 	}
 }
 
 func sendtoChannel(c *Channel) {
-	for {
-		msg := <-c.out
-
+	for msg := range c.out {
 		for u := c.users.Front(); u != nil; u = u.Next() {
 			if msg.nickname != u.Value.(*User).nickname {
 				u.Value.(*User).out <- msg.msg
@@ -89,11 +87,14 @@ func sendtoChannel(c *Channel) {
 }
 
 func sendtoClient(u *User) {
-	for {
-		message := <-u.out
+	for message := range u.out {
 		message += "\r\n"
-		log.Print("-> " + message)
-		u.conn.Write([]byte(message))
+		log.Println("-> " + message)
+		_, err := u.conn.Write([]byte(message))
+		if err != nil {
+			log.Println(err)
+			break
+		}
 	}
 }
 
