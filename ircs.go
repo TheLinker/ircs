@@ -8,10 +8,15 @@ import (
 	"strings"
 )
 
+type Msg struct {
+	nickname string
+	msg      string
+}
+
 type Channel struct {
 	name  string
 	users *list.List
-	out   chan string
+	out   chan Msg
 }
 
 var Channels map[string]*Channel
@@ -24,7 +29,6 @@ type User struct {
 	hostname    string
 	can_connect bool
 	out         chan string
-	inp         chan string
 }
 
 var Users *list.List
@@ -76,12 +80,11 @@ func listenClient(c *User) {
 
 func sendtoChannel(c *Channel) {
 	for {
-		//message := <-c.out
-		user, message := <-c.out, <-c.out
+		msg := <-c.out
 
 		for e := c.users.Front(); e != nil; e = e.Next() {
-			if user != e.Value.(*User).nickname {
-				e.Value.(*User).out <- message
+			if msg.nickname != e.Value.(*User).nickname {
+				e.Value.(*User).out <- msg.msg
 			}
 		}
 	}
@@ -118,7 +121,6 @@ func main() {
 		// multiple connections may be served concurrently.
 		tmp := new(User)
 		tmp.conn = conn
-		tmp.inp = make(chan string)
 		tmp.out = make(chan string)
 		Users.PushBack(tmp)
 		go sendtoClient(tmp)

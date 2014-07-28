@@ -64,7 +64,7 @@ func Join_handler(c *User, prefix string, args string) {
 	channel, ok := Channels[canal]
 
 	if !ok {
-		tmp := &Channel{name: canal, out: make(chan string), users: list.New()}
+		tmp := &Channel{name: canal, out: make(chan Msg), users: list.New()}
 		Channels[canal] = tmp
 		channel = tmp
 
@@ -89,8 +89,7 @@ func Join_handler(c *User, prefix string, args string) {
 	c.out <- fmt.Sprintf("353 %s = %s :%s", c.nickname, channel.name, strings.TrimLeft(users, " "))
 	c.out <- fmt.Sprintf("366 %s %s :End of /NAMES list", c.nickname, channel.name)
 
-	channel.out <- c.nickname
-	channel.out <- fmt.Sprintf(":%s!%s@%s JOIN %s", c.nickname, c.username, c.hostname, channel.name)
+	channel.out <- Msg{c.nickname, fmt.Sprintf(":%s!%s@%s JOIN %s", c.nickname, c.username, c.hostname, channel.name)}
 }
 
 func Privmsg_handler(c *User, prefix string, args string) {
@@ -107,6 +106,5 @@ func Privmsg_handler(c *User, prefix string, args string) {
 
 	msg := strings.Trim(argv[1], ": ")
 
-	channel.out <- c.nickname
-	channel.out <- fmt.Sprintf(":%s!%s@%s PRIVMSG %s :%s", c.nickname, c.username, c.hostname, channel.name, msg)
+	channel.out <- Msg{c.nickname, fmt.Sprintf(":%s!%s@%s PRIVMSG %s :%s", c.nickname, c.username, c.hostname, channel.name, msg)}
 }
