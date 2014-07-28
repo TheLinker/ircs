@@ -30,28 +30,32 @@ type User struct {
 var Users *list.List
 
 func interpretar_comando(message string, c *User) {
-    var prefix, command, argv string
+	var prefix, command, argv string
 
-    if len(message) == 0 { return }
-    if message[0] == ':' {
-        //estan mandando prefix
-        tmp := strings.SplitN(message, " ", 2)
-        prefix = strings.TrimLeft(tmp[0], ":")
-        message = tmp[1]
-    }
+	if len(message) == 0 {
+		return
+	}
+	if message[0] == ':' {
+		//estan mandando prefix
+		tmp := strings.SplitN(message, " ", 2)
+		prefix = strings.TrimLeft(tmp[0], ":")
+		message = tmp[1]
+	}
 
-    //obtenemos el comando
-    tmp := strings.SplitN(message, " ", 2)
-    command = tmp[0]
-    if len(tmp) > 1 {
-        argv = strings.Trim(tmp[1], " ")
-    }
+	//obtenemos el comando
+	tmp := strings.SplitN(message, " ", 2)
+	command = tmp[0]
+	if len(tmp) > 1 {
+		argv = strings.Trim(tmp[1], " ")
+	}
 
 	log.Printf("%q %q %q\n", prefix, command, argv)
 
-    handler, ok := Mess_handlers[command]
+	handler, ok := Mess_handlers[command]
 
-    if ok { handler(c, prefix, argv) }
+	if ok {
+		handler(c, prefix, argv)
+	}
 
 }
 
@@ -87,7 +91,7 @@ func sendtoClient(c *User) {
 	for {
 		message := <-c.out
 		message += "\r\n"
-		log.Print("-> " +message)
+		log.Print("-> " + message)
 		c.conn.Write([]byte(message))
 	}
 }

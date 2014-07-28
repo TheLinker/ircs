@@ -1,19 +1,19 @@
 package main
 
 import (
-    "strings"
-    "fmt"
-    "log"
-    "net"
-    "container/list"
+	"container/list"
+	"fmt"
+	"log"
+	"net"
+	"strings"
 )
 
-var Mess_handlers = map[string]func(c *User, prefix string, args string) {
-    "NICK": Nick_handler,
-    "USER": User_handler,
-    "PING": Ping_handler,
-    "JOIN": Join_handler,
-    "PRIVMSG": Privmsg_handler,
+var Mess_handlers = map[string]func(c *User, prefix string, args string){
+	"NICK":    Nick_handler,
+	"USER":    User_handler,
+	"PING":    Ping_handler,
+	"JOIN":    Join_handler,
+	"PRIVMSG": Privmsg_handler,
 }
 
 func Nick_handler(c *User, prefix string, args string) {
@@ -24,15 +24,17 @@ func Nick_handler(c *User, prefix string, args string) {
 }
 
 func User_handler(c *User, prefix string, args string) {
-    argv := strings.SplitN(args, " ", 4)
-    if len(argv) != 4 { return }
+	argv := strings.SplitN(args, " ", 4)
+	if len(argv) != 4 {
+		return
+	}
 
 	var hostname string
 
 	c.username = argv[0]
-    c.realname = strings.Trim(argv[3], " :")
+	c.realname = strings.Trim(argv[3], " :")
 
-    log.Print(c.conn.RemoteAddr().String())
+	log.Print(c.conn.RemoteAddr().String())
 	host, err := net.LookupAddr(c.conn.RemoteAddr().String())
 	if err != nil {
 		log.Print(err)
@@ -49,12 +51,14 @@ func User_handler(c *User, prefix string, args string) {
 }
 
 func Ping_handler(c *User, prefix string, args string) {
-    c.out <- fmt.Sprintf("PONG %s", args)
+	c.out <- fmt.Sprintf("PONG %s", args)
 }
 
 func Join_handler(c *User, prefix string, args string) {
-    argv := strings.Split(args, " ")
-    if len(argv) == 0 { return }
+	argv := strings.Split(args, " ")
+	if len(argv) == 0 {
+		return
+	}
 
 	canal := argv[0]
 	channel, ok := Channels[canal]
@@ -90,12 +94,16 @@ func Join_handler(c *User, prefix string, args string) {
 }
 
 func Privmsg_handler(c *User, prefix string, args string) {
-    argv := strings.SplitN(args, " ", 2)
-    if len(argv) != 2 { return }
+	argv := strings.SplitN(args, " ", 2)
+	if len(argv) != 2 {
+		return
+	}
 
 	canal := argv[0]
 	channel, ok := Channels[canal]
-	if !ok { return }
+	if !ok {
+		return
+	}
 
 	msg := strings.Trim(argv[1], ": ")
 
