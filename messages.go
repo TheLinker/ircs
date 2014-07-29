@@ -41,10 +41,10 @@ func UserHandler(u *User, prefix string, args string) {
 		u.hostname = host[0]
 	}
 
-    Replay(u.out, "bayerl.com.ar", "RPL_WELCOME", u.nickname, u.nickname, u.username, u.hostname)
-    Replay(u.out, "bayerl.com.ar", "RPL_YOURHOST", u.nickname, u.nickname, "MyIRCServer")
-    Replay(u.out, "bayerl.com.ar", "RPL_CREATED", u.nickname, "2014/07/26")
-    Replay(u.out, "bayerl.com.ar", "RPL_MYINFO", u.nickname ,"bayerl.com.ar", "0.0.0.0.0.0.1", "*", "*")
+	Replay(u.out, "bayerl.com.ar", "RPL_WELCOME", u.nickname, u.nickname, u.username, u.hostname)
+	Replay(u.out, "bayerl.com.ar", "RPL_YOURHOST", u.nickname, u.nickname, "MyIRCServer")
+	Replay(u.out, "bayerl.com.ar", "RPL_CREATED", u.nickname, "2014/07/26")
+	Replay(u.out, "bayerl.com.ar", "RPL_MYINFO", u.nickname, "bayerl.com.ar", "0.0.0.0.0.0.1", "*", "*")
 }
 
 func PingHandler(c *User, prefix string, args string) {
@@ -70,13 +70,13 @@ func JoinHandler(u *User, prefix string, args string) {
 	channel.usersM.Unlock()
 
 	//ahora la respuesta
-    u.out <- fmt.Sprintf(":%s JOIN %s", u.nickname, channel.name)
+	u.out <- fmt.Sprintf(":%s JOIN %s", u.nickname, channel.name)
 
 	//motd
-    Replay(u.out, "bayerl.com.ar", "RPL_TOPIC", u.nickname, channel.name, "Hola")
+	Replay(u.out, "bayerl.com.ar", "RPL_TOPIC", u.nickname, channel.name, "Hola")
 
 	//usuarios conectados
-    SendUserList(u, "bayerl.com.ar", channel)
+	SendUserList(u, "bayerl.com.ar", channel)
 
 	channel.out <- Msg{u.nickname, fmt.Sprintf(":%s!%s@%s JOIN %s", u.nickname, u.username, u.hostname, channel.name)}
 }

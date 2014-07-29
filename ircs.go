@@ -6,8 +6,8 @@ import (
 	"log"
 	"net"
 	"strings"
-	"time"
 	"sync"
+	"time"
 )
 
 type Msg struct {
@@ -16,10 +16,10 @@ type Msg struct {
 }
 
 type Channel struct {
-	name  string
+	name   string
 	usersM sync.Mutex
-	users *list.List
-	out   chan Msg
+	users  *list.List
+	out    chan Msg
 }
 
 var Channels map[string]*Channel
@@ -32,7 +32,7 @@ type User struct {
 	hostname    string
 	can_connect bool
 	out         chan string
-	in           chan string
+	in          chan string
 }
 
 var Users *list.List
@@ -76,7 +76,6 @@ func listenClient(u *User) {
 
 		msg := strings.TrimRight(string(line), "\r\n")
 		log.Println("<- " + msg)
-//		parseCommand(msg, u)
 		u.in <- msg
 	}
 }
@@ -110,9 +109,9 @@ func processMessages(u *User) {
 Out:
 	for {
 		select {
-		case msg := <- u.in:
+		case msg := <-u.in:
 			parseCommand(msg, u)
-		case <- timer.C:
+		case <-timer.C:
 			removeUser(u)
 			break Out
 		}
@@ -134,11 +133,11 @@ func sendtoChannel(c *Channel) {
 
 func sendtoClient(u *User) {
 	pinger := time.NewTimer(time.Second * 10)
-	for  {
+	for {
 		var msg string
 		select {
-		case msg = <- u.out:
-		case <- pinger.C:
+		case msg = <-u.out:
+		case <-pinger.C:
 			msg = "PING :TheLinker"
 		}
 		pinger.Reset(time.Second * 10)
