@@ -173,8 +173,10 @@ func Replay(out chan string, prefix string, message string, argv ...interface{})
 func SendUserList(u *User, prefix string, channel *Channel) {
 	//usuarios conectados
 	var nicks string
-	for u := channel.users.Front(); u != nil; u = u.Next() {
-		nicks += " " + u.Value.(*User).nickname
+	for _, u := range channel.users {
+		if u != nil {
+			nicks += " " + u.nickname
+		}
 	}
 
 	u.out <- fmt.Sprintf(":%s 353 %s = %s :%s", prefix, u.nickname, channel.name, strings.TrimLeft(nicks, " "))

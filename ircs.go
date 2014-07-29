@@ -2,7 +2,6 @@ package main
 
 import (
 	"bufio"
-	"container/list"
 	"log"
 	"net"
 	"strings"
@@ -18,7 +17,7 @@ type Msg struct {
 type Channel struct {
 	name   string
 	usersM sync.Mutex
-	users  *list.List
+	users  []*User
 	out    chan Msg
 }
 
@@ -34,8 +33,6 @@ type User struct {
 	out         chan string
 	in          chan string
 }
-
-var Users *list.List
 
 func parseCommand(message string, u *User) {
 	var prefix, command, argv string
@@ -81,17 +78,12 @@ func listenClient(u *User) {
 }
 
 func removeUser(u *User) {
-	//TODO: removes user from global list
 	for _, c := range Channels {
 		c.usersM.Lock()
-		var found *list.Element
-		for e := c.users.Front(); e != nil; e = e.Next() {
-			if e.Value.(*User) == u {
-				found = e
+		for i := range c.users {
+			if c.users[i] == u {
+				c.users[i] = nil
 			}
-		}
-		if found != nil {
-			c.users.Remove(found)
 		}
 		c.usersM.Unlock()
 	}
@@ -122,9 +114,9 @@ Out:
 func sendtoChannel(c *Channel) {
 	for msg := range c.out {
 		c.usersM.Lock()
-		for u := c.users.Front(); u != nil; u = u.Next() {
-			if msg.nickname != u.Value.(*User).nickname {
-				u.Value.(*User).out <- msg.msg
+		for _, u := range c.users {
+			if u != nil && msg.nickname != u.nickname {
+				u.out <- msg.msg
 			}
 		}
 		c.usersM.Unlock()
@@ -152,7 +144,6 @@ func sendtoClient(u *User) {
 }
 
 func main() {
-	Users = list.New()
 	Channels = make(map[string]*Channel)
 
 	// Listen on TCP port 2000 on all interfaces.
@@ -163,21 +154,17 @@ func main() {
 	defer l.Close()
 
 	for {
-		// Wait for a connection.
 		conn, err := l.Accept()
 		if err != nil {
 			log.Fatal(err)
 		}
-		// Handle the connection in a new goroutine.
-		// The loop then returns to accepting, so that
-		// multiple connections may be served concurrently.
-		tmp := new(User)
-		tmp.conn = conn
-		tmp.out = make(chan string)
-		tmp.in = make(chan string)
-		Users.PushBack(tmp)
-		go sendtoClient(tmp)
-		go listenClient(tmp)
-		go processMessages(tmp)
+
+		user := new(User)
+		user.conn = conn
+		user.out = make(chan string)
+		user.in = make(chan string)
+		go sendtoClient(user)
+		go listenClient(user)
+		go processMessages(user)
 	}
 }
