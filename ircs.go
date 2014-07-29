@@ -142,8 +142,8 @@ func sendtoClient(u *User) {
 			msg = "PING :TheLinker"
 		}
 
-		msg += "\r\n"
 		log.Println("-> " + msg)
+		msg += "\r\n"
 		_, err := u.conn.Write([]byte(msg))
 		if err != nil {
 			log.Println(err)
