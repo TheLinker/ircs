@@ -6,6 +6,7 @@ import (
 	"log"
 	"net"
 	"strings"
+	"time"
 )
 
 type Msg struct {
@@ -29,6 +30,7 @@ type User struct {
 	hostname    string
 	can_connect bool
 	out         chan string
+	in           chan string
 }
 
 var Users *list.List
@@ -70,9 +72,35 @@ func listenClient(u *User) {
 			break
 		}
 
-		message := strings.TrimRight(string(line), "\r\n")
-		log.Println("<- " + message)
-		parseCommand(message, u)
+		msg := strings.TrimRight(string(line), "\r\n")
+		log.Println("<- " + msg)
+//		parseCommand(msg, u)
+		u.in <- msg
+	}
+}
+
+func removeUser(u *User) {
+	//TODO: removes user from global list
+	//TODO: removes user from channels
+
+	close(u.out)
+	close(u.in)
+	err := u.conn.Close()
+	if err != nil {
+		log.Println(err)
+	}
+}
+
+func processMessages(u *User) {
+Out:
+	for {
+		select {
+		case msg := <- u.in:
+			parseCommand(msg, u)
+		case <- time.After(time.Second * 30):
+			removeUser(u)
+			break Out
+		}
 	}
 }
 
@@ -87,15 +115,24 @@ func sendtoChannel(c *Channel) {
 }
 
 func sendtoClient(u *User) {
-	for message := range u.out {
-		message += "\r\n"
-		log.Println("-> " + message)
-		_, err := u.conn.Write([]byte(message))
+	pinger := time.NewTicker(time.Second * 10)
+	for  {
+		var msg string
+		select {
+		case msg = <- u.out:
+		case <- pinger.C:
+			msg = "PING :TheLinker"
+		}
+
+		msg += "\r\n"
+		log.Println("-> " + msg)
+		_, err := u.conn.Write([]byte(msg))
 		if err != nil {
 			log.Println(err)
 			break
 		}
 	}
+	pinger.Stop()
 }
 
 func main() {
@@ -121,8 +158,10 @@ func main() {
 		tmp := new(User)
 		tmp.conn = conn
 		tmp.out = make(chan string)
+		tmp.in = make(chan string)
 		Users.PushBack(tmp)
 		go sendtoClient(tmp)
 		go listenClient(tmp)
+		go processMessages(tmp)
 	}
 }
