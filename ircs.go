@@ -7,6 +7,7 @@ import (
 	"net"
 	"strings"
 	"time"
+	"sync"
 )
 
 type Msg struct {
@@ -16,6 +17,7 @@ type Msg struct {
 
 type Channel struct {
 	name  string
+	usersM sync.Mutex
 	users *list.List
 	out   chan Msg
 }
@@ -81,7 +83,19 @@ func listenClient(u *User) {
 
 func removeUser(u *User) {
 	//TODO: removes user from global list
-	//TODO: removes user from channels
+	for _, c := range Channels {
+		c.usersM.Lock()
+		var found *list.Element
+		for e := c.users.Front(); e != nil; e = e.Next() {
+			if e.Value.(*User) == u {
+				found = e
+			}
+		}
+		if found != nil {
+			c.users.Remove(found)
+		}
+		c.usersM.Unlock()
+	}
 
 	close(u.out)
 	close(u.in)
@@ -92,25 +106,29 @@ func removeUser(u *User) {
 }
 
 func processMessages(u *User) {
+	timer := time.NewTimer(time.Second * 30)
 Out:
 	for {
 		select {
 		case msg := <- u.in:
 			parseCommand(msg, u)
-		case <- time.After(time.Second * 30):
+		case <- timer.C:
 			removeUser(u)
 			break Out
 		}
+		timer.Reset(time.Second * 30)
 	}
 }
 
 func sendtoChannel(c *Channel) {
 	for msg := range c.out {
+		c.usersM.Lock()
 		for u := c.users.Front(); u != nil; u = u.Next() {
 			if msg.nickname != u.Value.(*User).nickname {
 				u.Value.(*User).out <- msg.msg
 			}
 		}
+		c.usersM.Unlock()
 	}
 }
 
