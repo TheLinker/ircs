@@ -132,15 +132,14 @@ func sendtoChannel(c *Channel) {
 }
 
 func sendtoClient(u *User) {
-	pinger := time.NewTimer(time.Second * 10)
+	pinger := time.NewTicker(time.Second * 10)
 	for {
 		var msg string
 		select {
 		case msg = <-u.out:
 		case <-pinger.C:
-			msg = "PING :TheLinker"
+			msg = "PING :" + u.nickname
 		}
-		pinger.Reset(time.Second * 10)
 		log.Println("-> " + msg)
 		msg += "\r\n"
 		_, err := u.conn.Write([]byte(msg))
@@ -149,6 +148,7 @@ func sendtoClient(u *User) {
 			break
 		}
 	}
+	pinger.Stop()
 }
 
 func main() {
