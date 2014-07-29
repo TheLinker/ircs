@@ -65,7 +65,9 @@ func JoinHandler(u *User, prefix string, args string) {
 		channel = tmp
 		go sendtoChannel(channel)
 	}
+	channel.usersM.Lock()
 	channel.users.PushBack(u)
+	channel.usersM.Unlock()
 
 	//ahora la respuesta
     u.out <- fmt.Sprintf(":%s JOIN %s", u.nickname, channel.name)
