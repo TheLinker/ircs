@@ -16,10 +16,10 @@ type response struct {
 //        "RPL_WHOISCHANNELS":     {"319 %s :*( ( '@' / '+' ) %s ' ' )",},
 //        "RPL_NAMREPLY":          {"353 ( '=' / '*' / '@' ) %s :[ '@' / '+' ] %s *( ' ' [ '@' / '+' ] %s )",},
 var Responses = map[string]response{
-	"RPL_WELCOME":           {"001 %s :Welcome to the Internet Relay Network %s!%s@%s", 4},
-	"RPL_YOURHOST":          {"002 %s :Your host is %s, running version %s", 3},
-	"RPL_CREATED":           {"003 %s :This server was created %s", 2},
-	"RPL_MYINFO":            {"004 %s %s %s %s %s", 5},
+	"RPL_WELCOME":           {"001 %s :Welcome to the Internet Relay Network %s!%s@%s", 4}, //impl
+	"RPL_YOURHOST":          {"002 %s :Your host is %s, running version %s", 3},            //impl
+	"RPL_CREATED":           {"003 %s :This server was created %s", 2},                     //impl
+	"RPL_MYINFO":            {"004 %s %s %s %s %s", 5},                                     //impl
 	"RPL_BOUNCE":            {"005 %s :Try server %s, port %s", 3},
 	"RPL_AWAY":              {"301 %s :%s", 2},
 	"RPL_UNAWAY":            {"305 :You are no longer marked as being away", 0},
@@ -34,7 +34,7 @@ var Responses = map[string]response{
 	"RPL_LIST":              {"322 %s %s :%s", 3},
 	"RPL_LISTEND":           {"323 :End of LIST", 0},
 	"RPL_UNIQOPIS":          {"325 %s %s", 2},
-	"RPL_CHANNELMODEIS":     {"324 %s %s %s", 3},
+	"RPL_CHANNELMODEIS":     {"324 %s %s %s", 3}, //impl
 	"RPL_NOTOPIC":           {"331 %s :No topic is set", 1},
 	"RPL_TOPIC":             {"332 %s %s :%s", 3},
 	"RPL_INVITING":          {"341 %s %s", 2},
@@ -44,9 +44,9 @@ var Responses = map[string]response{
 	"RPL_EXCEPTLIST":        {"348 %s %s", 2},
 	"RPL_ENDOFEXCEPTLIST":   {"349 %s :End of channel exception list", 1},
 	"RPL_VERSION":           {"351 %s.%s %s :%s", 4},
-	"RPL_WHOREPLY":          {"352 %s %s %s %s %s ( 'H' / 'G' > ['*'] [ ( '@' / '+' ) ] :%s %s", 7},
-	"RPL_ENDOFWHO":          {"315 %s :End of WHO list", 1},
-	"RPL_ENDOFNAMES":        {"366 %s :End of NAMES list", 1},
+	"RPL_WHOREPLY":          {"352 %s %s %s %s %s %s %s :%s %s", 9}, //impl
+	"RPL_ENDOFWHO":          {"315 %s %s :End of WHO list", 2},      //impl
+	"RPL_ENDOFNAMES":        {"366 %s %s :End of NAMES list", 2},    //impl
 	"RPL_LINKS":             {"364 %s %s :%s %s", 4},
 	"RPL_ENDOFLINKS":        {"365 %s :End of LINKS list", 1},
 	"RPL_BANLIST":           {"367 %s %s", 2},
@@ -96,7 +96,7 @@ var Responses = map[string]response{
 	"RPL_TRYAGAIN":          {"263 %s :Please wait a while and try again.", 1},
 	"ERR_NOSUCHNICK":        {"401 %s :No such nick/channel", 1},
 	"ERR_NOSUCHSERVER":      {"402 %s :No such server", 1},
-	"ERR_NOSUCHCHANNEL":     {"403 %s :No such channel", 1},
+	"ERR_NOSUCHCHANNEL":     {"403 %s %s :No such channel", 2}, //impl
 	"ERR_CANNOTSENDTOCHAN":  {"404 %s :Cannot send to channel", 1},
 	"ERR_TOOMANYCHANNELS":   {"405 %s :You have joined too many channels", 1},
 	"ERR_WASNOSUCHNICK":     {"406 %s :There was no such nickname", 1},
@@ -112,19 +112,19 @@ var Responses = map[string]response{
 	"ERR_NOMOTD":            {"422 :MOTD File is missing", 0},
 	"ERR_NOADMININFO":       {"423 %s :No administrative info available", 1},
 	"ERR_FILEERROR":         {"424 :File error doing %s on %s", 2},
-	"ERR_NONICKNAMEGIVEN":   {"431 :No nickname given", 0},
-	"ERR_ERRONEUSNICKNAME":  {"432 %s :Erroneous nickname", 1},
-	"ERR_NICKNAMEINUSE":     {"433 %s :Nickname is already in use", 1},
+	"ERR_NONICKNAMEGIVEN":   {"431 %s :No nickname given", 1},             //impl
+	"ERR_ERRONEUSNICKNAME":  {"432 %s %s :Erroneous nickname", 2},         //impl
+	"ERR_NICKNAMEINUSE":     {"433 %s %s :Nickname is already in use", 2}, //impl
 	"ERR_NICKCOLLISION":     {"436 %s :Nickname collision KILL from %s@%s", 3},
 	"ERR_UNAVAILRESOURCE":   {"437 %s :Nick/channel is temporarily unavailable", 1},
 	"ERR_USERNOTINCHANNEL":  {"441 %s %s :They aren't on that channel", 2},
-	"ERR_NOTONCHANNEL":      {"442 %s :You're not on that channel", 1},
+	"ERR_NOTONCHANNEL":      {"442 %s %s :You're not on that channel", 2}, //impl
 	"ERR_USERONCHANNEL":     {"443 %s %s :is already on channel", 2},
 	"ERR_NOLOGIN":           {"444 %s :User not logged in", 1},
 	"ERR_SUMMONDISABLED":    {"445 :SUMMON has been disabled", 0},
 	"ERR_USERSDISABLED":     {"446 :USERS has been disabled", 0},
 	"ERR_NOTREGISTERED":     {"451 :You have not registered", 0},
-	"ERR_NEEDMOREPARAMS":    {"461 %s :Not enough parameters", 1},
+	"ERR_NEEDMOREPARAMS":    {"461 %s %s :Not enough parameters", 1}, //impl
 	"ERR_ALREADYREGISTRED":  {"462 :Unauthorized command (already registered)", 0},
 	"ERR_NOPERMFORHOST":     {"463 :Your host isn't among the privileged", 0},
 	"ERR_PASSWDMISMATCH":    {"464 :Password incorrect", 0},
@@ -178,5 +178,5 @@ func SendUserList(u *User, prefix string, channel *Channel) {
 	}
 
 	u.out <- fmt.Sprintf(":%s 353 %s = %s :%s", prefix, u.nickname, channel.name, strings.TrimLeft(nicks, " "))
-	u.out <- fmt.Sprintf(":%s 366 %s %s :End of /NAMES list", prefix, u.nickname, channel.name)
+	Replay(u.out, prefix, "RPL_ENDOFNAMES", u.nickname, channel.name)
 }

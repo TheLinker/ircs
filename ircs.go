@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"container/list"
+	"fmt"
 	"log"
 	"net"
 	"strings"
@@ -33,9 +34,34 @@ type User struct {
 	can_connect bool
 	out         chan string
 	in          chan string
+	channelsM   sync.RWMutex
+	channels    map[string]*Channel
 }
 
+var UsersLock sync.RWMutex
 var Users *list.List
+
+func RemoveUserFromChannel(channel *Channel, user *User) {
+	channel.usersM.Lock()
+	for u := channel.users.Front(); u != nil; u = u.Next() {
+		if u.Value.(*User).nickname == user.nickname {
+			channel.users.Remove(u)
+			break
+		}
+	}
+	channel.usersM.Unlock()
+}
+
+func FindUser(nickname string) *User {
+	UsersLock.RLock()
+	defer UsersLock.RUnlock()
+	for c := Users.Front(); c != nil; c = c.Next() {
+		if c.Value.(*User).nickname == nickname {
+			return c.Value.(*User)
+		}
+	}
+	return nil
+}
 
 func parseCommand(message string, u *User) {
 	var prefix, command, argv string
@@ -57,11 +83,13 @@ func parseCommand(message string, u *User) {
 		argv = strings.Trim(tmp[1], " ")
 	}
 
-	log.Printf("%q %q %q\n", prefix, command, argv)
+	//	log.Printf("%q %q %q\n", prefix, command, argv)
 
 	handler, ok := CommandHandlers[command]
 	if ok {
 		handler(u, prefix, argv)
+	} else {
+		log.Println("Command not found: " + command)
 	}
 }
 
@@ -75,7 +103,7 @@ func listenClient(u *User) {
 		}
 
 		msg := strings.TrimRight(string(line), "\r\n")
-		log.Println("<- " + msg)
+		log.Println(u.nickname + "\t-> " + msg)
 		u.in <- msg
 	}
 }
@@ -91,7 +119,13 @@ func removeUser(u *User) {
 			}
 		}
 		if found != nil {
-			c.users.Remove(found)
+			for _, i := range u.channels {
+				i.out <- Msg{u.nickname,
+					fmt.Sprintf(":%s!%s@%s QUIT %s :%s", u.nickname, u.username, u.hostname, "Timeout")}
+				u.out <- fmt.Sprintf(":%s!%s@%s ERROR :Closing Link: %s (Quit: %s)", u.nickname, u.username, u.hostname, u.hostname, "Timeout")
+
+				c.users.Remove(found)
+			}
 		}
 		c.usersM.Unlock()
 	}
@@ -141,7 +175,7 @@ func sendtoClient(u *User) {
 			msg = "PING :TheLinker"
 		}
 		pinger.Reset(time.Second * 10)
-		log.Println("-> " + msg)
+		log.Println(u.nickname + "\t<- " + msg)
 		msg += "\r\n"
 		_, err := u.conn.Write([]byte(msg))
 		if err != nil {
@@ -175,7 +209,12 @@ func main() {
 		tmp.conn = conn
 		tmp.out = make(chan string)
 		tmp.in = make(chan string)
+		tmp.channels = make(map[string]*Channel)
+
+		UsersLock.Lock()
 		Users.PushBack(tmp)
+		UsersLock.Unlock()
+
 		go sendtoClient(tmp)
 		go listenClient(tmp)
 		go processMessages(tmp)
