@@ -236,13 +236,11 @@ func QuitHandler(user *User, prefix string, args string) {
 	for u := Users.Front(); u != nil; u = u.Next() {
 		if u.Value.(*User).nickname == user.nickname {
 			Users.Remove(u)
-			close(u.Value.(*User).out)
-			close(u.Value.(*User).in)
 			err := u.Value.(*User).conn.Close()
 			if err != nil {
 				log.Println(err)
 			}
-
+			close(u.Value.(*User).out)
 			break
 		}
 	}

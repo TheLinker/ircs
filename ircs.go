@@ -33,9 +33,9 @@ type User struct {
 	hostname    string
 	can_connect bool
 	out         chan string
-	in          chan string
 	channelsM   sync.RWMutex
 	channels    map[string]*Channel
+	lastActivity time.Time
 }
 
 var UsersLock sync.RWMutex
@@ -105,8 +105,11 @@ func listenClient(u *User) {
 
 		msg := strings.TrimRight(string(line), "\r\n")
 		log.Println(u.nickname + "\t-> " + msg)
-		u.in <- msg
+		u.lastActivity = time.Now()
+		u.conn.SetDeadline(u.lastActivity.Add(time.Second * 30))
+		parseCommand(msg, u)
 	}
+	removeUser(u)
 }
 
 func removeUser(u *User) {
@@ -132,22 +135,6 @@ func removeUser(u *User) {
 		log.Println(err)
 	}
 	close(u.out)
-	close(u.in)
-}
-
-func processMessages(u *User) {
-	timer := time.NewTimer(time.Second * 30)
-Out:
-	for {
-		select {
-		case msg := <-u.in:
-			parseCommand(msg, u)
-		case <-timer.C:
-			removeUser(u)
-			break Out
-		}
-		timer.Reset(time.Second * 30)
-	}
 }
 
 func sendtoChannel(c *Channel) {
@@ -203,9 +190,10 @@ func main() {
 		}
 
 		user := new(User)
+		user.lastActivity = time.Now()
+		conn.SetDeadline(user.lastActivity.Add(time.Second * 30))
 		user.conn = conn
 		user.out = make(chan string, 20)
-		user.in = make(chan string)
 		user.channels = make(map[string]*Channel)
 
 		UsersLock.Lock()
@@ -214,6 +202,5 @@ func main() {
 
 		go sendtoClient(user)
 		go listenClient(user)
-		go processMessages(user)
 	}
 }
