@@ -127,12 +127,12 @@ func removeUser(u *User) {
 		c.usersM.Unlock()
 	}
 
-	close(u.out)
-	close(u.in)
 	err := u.conn.Close()
 	if err != nil {
 		log.Println(err)
 	}
+	close(u.out)
+	close(u.in)
 }
 
 func processMessages(u *User) {
@@ -204,7 +204,7 @@ func main() {
 
 		user := new(User)
 		user.conn = conn
-		user.out = make(chan string)
+		user.out = make(chan string, 20)
 		user.in = make(chan string)
 		user.channels = make(map[string]*Channel)
 
