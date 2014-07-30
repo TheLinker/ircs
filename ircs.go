@@ -109,10 +109,12 @@ func listenClient(u *User) {
 		u.conn.SetDeadline(u.lastActivity.Add(time.Second * 30))
 		parseCommand(msg, u)
 	}
+    log.Print("Voy a matar a: " + u.nickname)
 	removeUser(u)
 }
 
 func removeUser(u *User) {
+    u.channelsM.RLock()
 	for _, c := range u.channels {
 		c.out <- Msg{
 			u.nickname,
@@ -122,14 +124,19 @@ func removeUser(u *User) {
 		u.out <- fmt.Sprintf(":%s!%s@%s ERROR :Closing Link: %s (Quit: %s)",
 			u.nickname, u.username, u.hostname, u.hostname, "Timeout")
 	}
+    u.channelsM.RUnlock()
 	for _, c := range Channels {
 		c.usersM.Lock()
 		for i := range c.users {
 			if c.users[i] == u {
 				c.users[i] = c.users[len(c.users)-1]
 			}
-		}
-		c.users = c.users[:len(c.users)-1]
+        }
+		log.Print(len(c.users))
+
+        if len(c.users) > 0 {
+	    	c.users = c.users[:len(c.users)-1]
+        }
 		c.usersM.Unlock()
 	}
 
