@@ -18,7 +18,7 @@ type Msg struct {
 
 type Channel struct {
 	name   string
-	usersM sync.Mutex
+	usersM sync.RWMutex
 	users  []*User
 	out    chan Msg
 }
@@ -113,17 +113,20 @@ func listenClient(u *User) {
 }
 
 func removeUser(u *User) {
+	for _, c := range u.channels {
+		c.out <- Msg{
+			u.nickname,
+			fmt.Sprintf(":%s!%s@%s QUIT %s :%s",
+				u.nickname, u.username, u.hostname, c.name, "Timeout"),
+		}
+		u.out <- fmt.Sprintf(":%s!%s@%s ERROR :Closing Link: %s (Quit: %s)",
+			u.nickname, u.username, u.hostname, u.hostname, "Timeout")
+	}
 	for _, c := range Channels {
 		c.usersM.Lock()
 		for i := range c.users {
 			if c.users[i] == u {
 				c.users[i] = c.users[len(c.users)-1]
-
-				for _, i := range u.channels {
-					i.out <- Msg{u.nickname,
-						fmt.Sprintf(":%s!%s@%s QUIT %s :%s", u.nickname, u.username, u.hostname, "Timeout")}
-					u.out <- fmt.Sprintf(":%s!%s@%s ERROR :Closing Link: %s (Quit: %s)", u.nickname, u.username, u.hostname, u.hostname, "Timeout")
-				}
 			}
 		}
 		c.users = c.users[:len(c.users)-1]
@@ -139,7 +142,7 @@ func removeUser(u *User) {
 
 func sendtoChannel(c *Channel) {
 	for msg := range c.out {
-		c.usersM.Lock()
+		c.usersM.RLock()
 		for _, u := range c.users {
 			if msg.nickname != u.nickname {
 				select {
@@ -148,7 +151,7 @@ func sendtoChannel(c *Channel) {
 				}
 			}
 		}
-		c.usersM.Unlock()
+		c.usersM.RUnlock()
 	}
 }
 
