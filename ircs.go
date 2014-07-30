@@ -45,10 +45,11 @@ func RemoveUserFromChannel(channel *Channel, user *User) {
 	channel.usersM.Lock()
 	for i := range channel.users {
 		if channel.users[i] == user {
-			channel.users[i] = nil
+			channel.users[i] = channel.users[len(channel.users)-1]
 			break
 		}
 	}
+	channel.users = channel.users[:len(channel.users)-1]
 	channel.usersM.Unlock()
 }
 
@@ -113,15 +114,16 @@ func removeUser(u *User) {
 		c.usersM.Lock()
 		for i := range c.users {
 			if c.users[i] == u {
-				c.users[i] = nil
+				c.users[i] = c.users[len(c.users)-1]
 
-			    for _, i := range u.channels {
-			    	i.out <- Msg{u.nickname,
-			    		fmt.Sprintf(":%s!%s@%s QUIT %s :%s", u.nickname, u.username, u.hostname, "Timeout")}
-			    	u.out <- fmt.Sprintf(":%s!%s@%s ERROR :Closing Link: %s (Quit: %s)", u.nickname, u.username, u.hostname, u.hostname, "Timeout")
-			    }
+				for _, i := range u.channels {
+					i.out <- Msg{u.nickname,
+						fmt.Sprintf(":%s!%s@%s QUIT %s :%s", u.nickname, u.username, u.hostname, "Timeout")}
+					u.out <- fmt.Sprintf(":%s!%s@%s ERROR :Closing Link: %s (Quit: %s)", u.nickname, u.username, u.hostname, u.hostname, "Timeout")
+				}
 			}
 		}
+		c.users = c.users[:len(c.users)-1]
 		c.usersM.Unlock()
 	}
 
@@ -152,7 +154,7 @@ func sendtoChannel(c *Channel) {
 	for msg := range c.out {
 		c.usersM.Lock()
 		for _, u := range c.users {
-			if u != nil && msg.nickname != u.nickname {
+			if msg.nickname != u.nickname {
 				select {
 				case u.out <- msg.msg:
 				default:
@@ -164,28 +166,27 @@ func sendtoChannel(c *Channel) {
 }
 
 func sendtoClient(u *User) {
-    pinger := time.NewTicker(time.Second * 10)
-    for {
-        var msg string
-        select {
-        case msg = <-u.out:
-        case <-pinger.C:
-                msg = "PING :" + u.nickname
-        }
-        log.Println(u.nickname + "\t<- " + msg)
-        msg += "\r\n"
-        _, err := u.conn.Write([]byte(msg))
-        if err != nil {
-            log.Println(err)
-            break
-        }
-    }
-    pinger.Stop()
+	pinger := time.NewTicker(time.Second * 10)
+	for {
+		var msg string
+		select {
+		case msg = <-u.out:
+		case <-pinger.C:
+			msg = "PING :" + u.nickname
+		}
+		log.Println(u.nickname + "\t<- " + msg)
+		msg += "\r\n"
+		_, err := u.conn.Write([]byte(msg))
+		if err != nil {
+			log.Println(err)
+			break
+		}
+	}
+	pinger.Stop()
 }
 
-
 func main() {
-    Users = list.New()
+	Users = list.New()
 	Channels = make(map[string]*Channel)
 
 	// Listen on TCP port 2000 on all interfaces.
