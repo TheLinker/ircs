@@ -116,7 +116,10 @@ func sendtoChannel(c *Channel) {
 		c.usersM.Lock()
 		for _, u := range c.users {
 			if u != nil && msg.nickname != u.nickname {
-				u.out <- msg.msg
+				select {
+				case u.out <- msg.msg:
+				default:
+				}
 			}
 		}
 		c.usersM.Unlock()
