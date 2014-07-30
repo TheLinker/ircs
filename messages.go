@@ -101,23 +101,23 @@ func JoinHandler(u *User, prefix string, args string) {
 
 	cName := argv[0]
 
-	c, ok := u.channels.s[cName]
+	c, ok := u.channels.Get(cName)
 	if ok {
 		return //ya esta en el canal
 	}
 
-	c, ok = Channels.s[cName]
+	c, ok = Channels.Get(cName)
 	if !ok {
 		c = &Channel{
 			name: cName,
 			out: make(chan Msg),
 		}
 		c.users.Init()
-		Channels.Add(cName, c)
+		Channels.Set(cName, c)
 		go sendtoChannel(c)
 	}
 	c.users.Add(u)
-	u.channels.Add(cName, c)
+	u.channels.Set(cName, c)
 
 	//ahora la respuesta
 	//u.out <- fmt.Sprintf(":%s JOIN %s", u.nickname, channel.name)
@@ -144,7 +144,7 @@ func PrivmsgHandler(u *User, prefix string, args string) {
 	}
 
 	cName := argv[0]
-	c, ok := Channels.s[cName]
+	c, ok := Channels.Get(cName)
 	if !ok {
 		return
 	}
@@ -170,18 +170,18 @@ func WhoHandler(u *User, prefix string, args string) {
 
 	//por ahora asumo que me esta pasando un canal
 	cName := argv[0]
-	c, ok := Channels.s[cName]
+	c, ok := Channels.Get(cName)
 	if !ok {
 		return
 	}
 
-	c.users.Lock()
+	c.users.RLock()
 	for _,u := range c.users.s {
 		Replay(u.out, "bayerl.com.ar", "RPL_WHOREPLY", u.nickname,
 			c.name, u.username, u.hostname, "bayerl.com.ar",
 			u.nickname, "H", "0", u.realname)
 	}
-	c.users.Unlock()
+	c.users.RUnlock()
 
 	Replay(u.out, "bayerl.com.ar", "RPL_ENDOFWHO", u.nickname, c.name)
 
@@ -198,7 +198,7 @@ func PartHandler(u *User, prefix string, args string) {
 	channelsStr := strings.Split(strings.Trim(argv[0], " "), ",")
 	for _, str := range channelsStr {
 		//busco el canal
-		c, ok := Channels.s[str]
+		c, ok := Channels.Get(str)
 		if !ok {
 			Replay(u.out, "bayerl.com.ar", "ERR_NOSUCHCHANNEL",
 				u.nickname, str)
@@ -206,9 +206,7 @@ func PartHandler(u *User, prefix string, args string) {
 		}
 
 		//busco el canal en el usuario
-		u.channels.RLock()
-		_, ok = u.channels.s[str]
-		u.channels.RUnlock()
+		_, ok = u.channels.Get(str)
 		if !ok {
 			Replay(u.out, "bayerl.com.ar", "ERR_NOTONCHANNEL",
 				u.nickname, str)

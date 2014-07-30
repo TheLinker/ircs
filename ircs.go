@@ -30,10 +30,17 @@ func (set *ChannelsSet) Init() {
 	set.s = make(map[string]*Channel)
 }
 
-func (set *ChannelsSet) Add(k string, c *Channel) {
+func (set *ChannelsSet) Set(k string, c *Channel) {
 	set.Lock()
 	set.s[k] = c
 	set.Unlock()
+}
+
+func (set *ChannelsSet) Get(k string) (c *Channel, ok bool) {
+	set.RLock()
+	defer set.RUnlock()
+	c, ok = set.s[k]
+	return
 }
 
 var Channels ChannelsSet
