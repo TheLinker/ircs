@@ -170,15 +170,16 @@ func Replay(out chan string, prefix string, message string, argv ...interface{})
 	out <- r
 }
 
-func SendUserList(u *User, prefix string, channel *Channel) {
+func SendUserList(u *User, prefix string, c *Channel) {
 	//usuarios conectados
 	var nicks string
-	for _, u := range channel.users {
-		if u != nil {
-			nicks += " " + u.nickname
-		}
+	c.users.RLock()
+	for _, u := range c.users.s {
+		nicks += " " + u.nickname
 	}
+	c.users.RUnlock()
 
-	u.out <- fmt.Sprintf(":%s 353 %s = %s :%s", prefix, u.nickname, channel.name, strings.TrimLeft(nicks, " "))
-	Replay(u.out, prefix, "RPL_ENDOFNAMES", u.nickname, channel.name)
+	u.out <- fmt.Sprintf(":%s 353 %s = %s :%s", prefix, u.nickname,
+		c.name, strings.TrimLeft(nicks, " "))
+	Replay(u.out, prefix, "RPL_ENDOFNAMES", u.nickname, c.name)
 }

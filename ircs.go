@@ -2,7 +2,6 @@ package main
 
 import (
 	"bufio"
-	"container/list"
 	"fmt"
 	"log"
 	"net"
@@ -12,18 +11,32 @@ import (
 )
 
 type Msg struct {
-	nickname string
+	user *User
 	msg      string
 }
 
 type Channel struct {
 	name   string
-	usersM sync.RWMutex
-	users  []*User
+	users  UsersSet
 	out    chan Msg
 }
 
-var Channels map[string]*Channel
+type ChannelsSet struct {
+	sync.RWMutex
+	s map[string]*Channel
+}
+
+func (set *ChannelsSet) Init() {
+	set.s = make(map[string]*Channel)
+}
+
+func (set *ChannelsSet) Add(k string, c *Channel) {
+	set.Lock()
+	set.s[k] = c
+	set.Unlock()
+}
+
+var Channels ChannelsSet
 
 type User struct {
 	conn        net.Conn
@@ -33,36 +46,55 @@ type User struct {
 	hostname    string
 	can_connect bool
 	out         chan string
-	channelsM   sync.RWMutex
-	channels    map[string]*Channel
-	lastActivity time.Time
+	channels    ChannelsSet
 }
 
-var UsersLock sync.RWMutex
-var Users *list.List
+type UsersSet struct {
+	sync.RWMutex
+	s []*User
+}
 
-func RemoveUserFromChannel(channel *Channel, user *User) {
-	channel.usersM.Lock()
-	for i := range channel.users {
-		if channel.users[i] == user {
-			channel.users[i] = channel.users[len(channel.users)-1]
+func (set *UsersSet) Init() {
+	set.s = make([]*User, 0)
+}
+
+func (users *UsersSet) Remove(u *User) (ret *User) {
+	found := false
+
+	users.Lock()
+	for i := range users.s {
+		if users.s[i] == u {
+			found = true
+			ret = users.s[i]
+			users.s[i] = users.s[len(users.s)-1]
 			break
 		}
 	}
-	channel.users = channel.users[:len(channel.users)-1]
-	channel.usersM.Unlock()
+	if found {
+		users.s = users.s[:len(users.s)-1]
+	}
+	users.Unlock()
+	return
 }
 
-func FindUser(nickname string) *User {
-	UsersLock.RLock()
-	defer UsersLock.RUnlock()
-	for c := Users.Front(); c != nil; c = c.Next() {
-		if c.Value.(*User).nickname == nickname {
-			return c.Value.(*User)
+func (users *UsersSet) FindByNick(nickname string) *User {
+	users.RLock()
+	defer users.RUnlock()
+	for _, u := range users.s {
+		if u.nickname == nickname {
+			return u
 		}
 	}
 	return nil
 }
+
+func (users *UsersSet) Add(u *User) {
+	users.Lock()
+	users.s = append(users.s, u)
+	users.Unlock()
+}
+
+var Users UsersSet
 
 func parseCommand(message string, u *User) {
 	var prefix, command, argv string
@@ -84,8 +116,6 @@ func parseCommand(message string, u *User) {
 		argv = strings.Trim(tmp[1], " ")
 	}
 
-	//	log.Printf("%q %q %q\n", prefix, command, argv)
-
 	handler, ok := CommandHandlers[command]
 	if ok {
 		handler(u, prefix, argv)
@@ -105,33 +135,38 @@ func listenClient(u *User) {
 
 		msg := strings.TrimRight(string(line), "\r\n")
 		log.Println(u.nickname + "\t-> " + msg)
-		u.lastActivity = time.Now()
-		u.conn.SetDeadline(u.lastActivity.Add(time.Second * 30))
+		u.conn.SetDeadline(time.Now().Add(time.Second * 30))
 		parseCommand(msg, u)
 	}
+	log.Println("removing user: ", u.nickname)
 	removeUser(u)
 }
 
 func removeUser(u *User) {
-	for _, c := range u.channels {
+	// send messages to user channels
+	Channels.RLock()
+	for _, c := range u.channels.s {
 		c.out <- Msg{
-			u.nickname,
+			u,
 			fmt.Sprintf(":%s!%s@%s QUIT %s :%s",
-				u.nickname, u.username, u.hostname, c.name, "Timeout"),
+				u.nickname, u.username,
+				u.hostname, c.name, "Timeout"),
 		}
 		u.out <- fmt.Sprintf(":%s!%s@%s ERROR :Closing Link: %s (Quit: %s)",
-			u.nickname, u.username, u.hostname, u.hostname, "Timeout")
+			u.nickname, u.username, u.hostname,
+			u.hostname, "Timeout")
 	}
-	for _, c := range Channels {
-		c.usersM.Lock()
-		for i := range c.users {
-			if c.users[i] == u {
-				c.users[i] = c.users[len(c.users)-1]
-			}
-		}
-		c.users = c.users[:len(c.users)-1]
-		c.usersM.Unlock()
+	Channels.RUnlock()
+
+	// removes user from global channels' set
+	Channels.RLock()
+	for _, c := range Channels.s {
+		c.users.Remove(u)
 	}
+	Channels.RUnlock()
+
+	// removes user from global users set
+	Users.Remove(u)
 
 	err := u.conn.Close()
 	if err != nil {
@@ -142,16 +177,16 @@ func removeUser(u *User) {
 
 func sendtoChannel(c *Channel) {
 	for msg := range c.out {
-		c.usersM.RLock()
-		for _, u := range c.users {
-			if msg.nickname != u.nickname {
+		c.users.RLock()
+		for _, u := range c.users.s {
+			if msg.user != u {
 				select {
 				case u.out <- msg.msg:
 				default:
 				}
 			}
 		}
-		c.usersM.RUnlock()
+		c.users.RUnlock()
 	}
 }
 
@@ -176,8 +211,8 @@ func sendtoClient(u *User) {
 }
 
 func main() {
-	Users = list.New()
-	Channels = make(map[string]*Channel)
+	Users.Init()
+	Channels.Init()
 
 	// Listen on TCP port 2000 on all interfaces.
 	l, err := net.Listen("tcp", ":2000")
@@ -193,15 +228,12 @@ func main() {
 		}
 
 		user := new(User)
-		user.lastActivity = time.Now()
-		conn.SetDeadline(user.lastActivity.Add(time.Second * 30))
+		conn.SetDeadline(time.Now().Add(time.Second * 30))
 		user.conn = conn
 		user.out = make(chan string, 20)
-		user.channels = make(map[string]*Channel)
+		user.channels.Init()
 
-		UsersLock.Lock()
-		Users.PushBack(user)
-		UsersLock.Unlock()
+		Users.Add(user)
 
 		go sendtoClient(user)
 		go listenClient(user)
