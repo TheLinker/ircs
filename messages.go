@@ -1,7 +1,6 @@
 package main
 
 import (
-	"container/list"
 	"fmt"
 	"log"
 	"net"
@@ -99,13 +98,17 @@ func JoinHandler(u *User, prefix string, args string) {
 
 	channel, ok = Channels[channelName]
 	if !ok {
-		tmp := &Channel{name: channelName, out: make(chan Msg), users: list.New()}
+		tmp := &Channel{
+			name: channelName,
+			out: make(chan Msg),
+			users: make([]*User, 0, 1),
+		}
 		Channels[channelName] = tmp
 		channel = tmp
 		go sendtoChannel(channel)
 	}
 	channel.usersM.Lock()
-	channel.users.PushBack(u)
+	channel.users = append(channel.users, u)
 	channel.usersM.Unlock()
 
 	u.channelsM.Lock()
@@ -160,9 +163,8 @@ func WhoHandler(user *User, prefix string, args string) {
 	}
 
 	channel.usersM.Lock()
-	for u := channel.users.Front(); u != nil; u = u.Next() {
-		tmp := u.Value.(*User)
-		Replay(user.out, "bayerl.com.ar", "RPL_WHOREPLY", user.nickname, channel.name, tmp.username, tmp.hostname, "bayerl.com.ar", tmp.nickname, "H", "0", tmp.realname)
+	for _,u := range channel.users {
+		Replay(user.out, "bayerl.com.ar", "RPL_WHOREPLY", user.nickname, channel.name, u.username, u.hostname, "bayerl.com.ar", u.nickname, "H", "0", u.realname)
 	}
 	channel.usersM.Unlock()
 

@@ -19,7 +19,7 @@ type Msg struct {
 type Channel struct {
 	name   string
 	usersM sync.Mutex
-	users  *list.List
+	users  []*User
 	out    chan Msg
 }
 
@@ -43,9 +43,9 @@ var Users *list.List
 
 func RemoveUserFromChannel(channel *Channel, user *User) {
 	channel.usersM.Lock()
-	for u := channel.users.Front(); u != nil; u = u.Next() {
-		if u.Value.(*User).nickname == user.nickname {
-			channel.users.Remove(u)
+	for i := range channel.users {
+		if channel.users[i] == user {
+			channel.users[i] = nil
 			break
 		}
 	}
@@ -109,22 +109,17 @@ func listenClient(u *User) {
 }
 
 func removeUser(u *User) {
-	//TODO: removes user from global list
 	for _, c := range Channels {
 		c.usersM.Lock()
-		var found *list.Element
-		for e := c.users.Front(); e != nil; e = e.Next() {
-			if e.Value.(*User) == u {
-				found = e
-			}
-		}
-		if found != nil {
-			for _, i := range u.channels {
-				i.out <- Msg{u.nickname,
-					fmt.Sprintf(":%s!%s@%s QUIT %s :%s", u.nickname, u.username, u.hostname, "Timeout")}
-				u.out <- fmt.Sprintf(":%s!%s@%s ERROR :Closing Link: %s (Quit: %s)", u.nickname, u.username, u.hostname, u.hostname, "Timeout")
+		for i := range c.users {
+			if c.users[i] == u {
+				c.users[i] = nil
 
-				c.users.Remove(found)
+			    for _, i := range u.channels {
+			    	i.out <- Msg{u.nickname,
+			    		fmt.Sprintf(":%s!%s@%s QUIT %s :%s", u.nickname, u.username, u.hostname, "Timeout")}
+			    	u.out <- fmt.Sprintf(":%s!%s@%s ERROR :Closing Link: %s (Quit: %s)", u.nickname, u.username, u.hostname, u.hostname, "Timeout")
+			    }
 			}
 		}
 		c.usersM.Unlock()
@@ -156,9 +151,12 @@ Out:
 func sendtoChannel(c *Channel) {
 	for msg := range c.out {
 		c.usersM.Lock()
-		for u := c.users.Front(); u != nil; u = u.Next() {
-			if msg.nickname != u.Value.(*User).nickname {
-				u.Value.(*User).out <- msg.msg
+		for _, u := range c.users {
+			if u != nil && msg.nickname != u.nickname {
+				select {
+				case u.out <- msg.msg:
+				default:
+				}
 			}
 		}
 		c.usersM.Unlock()
@@ -166,27 +164,28 @@ func sendtoChannel(c *Channel) {
 }
 
 func sendtoClient(u *User) {
-	pinger := time.NewTimer(time.Second * 10)
-	for {
-		var msg string
-		select {
-		case msg = <-u.out:
-		case <-pinger.C:
-			msg = "PING :TheLinker"
-		}
-		pinger.Reset(time.Second * 10)
-		log.Println(u.nickname + "\t<- " + msg)
-		msg += "\r\n"
-		_, err := u.conn.Write([]byte(msg))
-		if err != nil {
-			log.Println(err)
-			break
-		}
-	}
+    pinger := time.NewTicker(time.Second * 10)
+    for {
+        var msg string
+        select {
+        case msg = <-u.out:
+        case <-pinger.C:
+                msg = "PING :" + u.nickname
+        }
+        log.Println(u.nickname + "\t<- " + msg)
+        msg += "\r\n"
+        _, err := u.conn.Write([]byte(msg))
+        if err != nil {
+            log.Println(err)
+            break
+        }
+    }
+    pinger.Stop()
 }
 
+
 func main() {
-	Users = list.New()
+    Users = list.New()
 	Channels = make(map[string]*Channel)
 
 	// Listen on TCP port 2000 on all interfaces.
@@ -197,26 +196,23 @@ func main() {
 	defer l.Close()
 
 	for {
-		// Wait for a connection.
 		conn, err := l.Accept()
 		if err != nil {
 			log.Fatal(err)
 		}
-		// Handle the connection in a new goroutine.
-		// The loop then returns to accepting, so that
-		// multiple connections may be served concurrently.
-		tmp := new(User)
-		tmp.conn = conn
-		tmp.out = make(chan string)
-		tmp.in = make(chan string)
-		tmp.channels = make(map[string]*Channel)
+
+		user := new(User)
+		user.conn = conn
+		user.out = make(chan string)
+		user.in = make(chan string)
+		user.channels = make(map[string]*Channel)
 
 		UsersLock.Lock()
-		Users.PushBack(tmp)
+		Users.PushBack(user)
 		UsersLock.Unlock()
 
-		go sendtoClient(tmp)
-		go listenClient(tmp)
-		go processMessages(tmp)
+		go sendtoClient(user)
+		go listenClient(user)
+		go processMessages(user)
 	}
 }
