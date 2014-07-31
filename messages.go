@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"log"
 	"net"
 	"regexp"
 	"strings"
@@ -22,19 +21,22 @@ var CommandHandlers = map[string]func(c *User, prefix string, args string){
 
 func NickHandler(u *User, prefix string, args string) {
 	if len(args) == 0 {
-		Replay(u.out, "bayerl.com.ar", "ERR_NONICKNAMEGIVEN", u.nickname)
+		Replay(u.out, "bayerl.com.ar",
+			"ERR_NONICKNAMEGIVEN",u.nickname)
 		return
 	}
 
 	nickPattern := "^[a-zA-Z\\[\\]_^`{}|][a-zA-Z0-9\\[\\]_^`{}|-]{0,8}$"
 	matched, _ := regexp.MatchString(nickPattern, args)
 	if !matched {
-		Replay(u.out, "bayerl.com.ar", "ERR_ERRONEUSNICKNAME", u.nickname, args)
+		Replay(u.out, "bayerl.com.ar",
+			"ERR_ERRONEUSNICKNAME", u.nickname, args)
 		return
 	}
 
-	if FindUser(args) != nil {
-		Replay(u.out, "bayerl.com.ar", "ERR_NICKNAMEINUSE", u.nickname, args)
+	if Users.FindByNick(args) != nil {
+		Replay(u.out, "bayerl.com.ar",
+			"ERR_NICKNAMEINUSE", u.nickname, args)
 		return
 	}
 
@@ -42,15 +44,19 @@ func NickHandler(u *User, prefix string, args string) {
 	if len(u.nickname) == 0 {
 		u.out <- fmt.Sprintf("NOTICE * :Welcome %s", args)
 	} else {
-		u.out <- fmt.Sprintf(":%s!%s@%s NICK %s", u.nickname, u.username, u.hostname, args)
+		u.out <- fmt.Sprintf(":%s!%s@%s NICK %s", u.nickname,
+			u.username, u.hostname, args)
 	}
 
 	//se lo mandamos a los canales del usuario
-	u.channelsM.RLock()
-	for _, c := range u.channels {
-		c.out <- Msg{u.nickname, fmt.Sprintf(":%s!%s@%s NICK %s", u.nickname, u.username, u.hostname, args)}
+	u.channels.RLock()
+	for _, c := range u.channels.s {
+		c.out <- Msg{u,
+			fmt.Sprintf(":%s!%s@%s NICK %s", u.nickname,
+				u.username, u.hostname, args),
+		}
 	}
-	u.channelsM.RUnlock()
+	u.channels.RUnlock()
 
 	u.nickname = args
 }
@@ -58,7 +64,8 @@ func NickHandler(u *User, prefix string, args string) {
 func UserHandler(u *User, prefix string, args string) {
 	argv := strings.SplitN(args, " ", 4)
 	if len(argv) < 4 {
-		Replay(u.out, "bayerl.com.ar", "ERR_NEEDMOREPARAMS", u.nickname, "USER")
+		Replay(u.out, "bayerl.com.ar",
+			"ERR_NEEDMOREPARAMS", u.nickname, "USER")
 		return
 	}
 
@@ -72,14 +79,17 @@ func UserHandler(u *User, prefix string, args string) {
 		u.hostname = host[0]
 	}
 
-	Replay(u.out, "bayerl.com.ar", "RPL_WELCOME", u.nickname, u.nickname, u.username, u.hostname)
-	Replay(u.out, "bayerl.com.ar", "RPL_YOURHOST", u.nickname, "MyIRCServer", "0.0.0.0.0.0.1")
+	Replay(u.out, "bayerl.com.ar", "RPL_WELCOME",
+		u.nickname, u.nickname, u.username, u.hostname)
+	Replay(u.out, "bayerl.com.ar", "RPL_YOURHOST",
+		u.nickname, "MyIRCServer", "0.0.0.0.0.0.1")
 	Replay(u.out, "bayerl.com.ar", "RPL_CREATED", u.nickname, "2014/07/26")
-	Replay(u.out, "bayerl.com.ar", "RPL_MYINFO", u.nickname, "bayerl.com.ar", "0.0.0.0.0.0.1", "*", "*")
+	Replay(u.out, "bayerl.com.ar", "RPL_MYINFO",
+		u.nickname, "bayerl.com.ar", "0.0.0.0.0.0.1", "*", "*")
 }
 
-func PingHandler(c *User, prefix string, args string) {
-	c.out <- fmt.Sprintf("PONG %s", args)
+func PingHandler(u *User, prefix string, args string) {
+	u.out <- fmt.Sprintf("PONG %s", args)
 }
 
 func JoinHandler(u *User, prefix string, args string) {
@@ -88,164 +98,155 @@ func JoinHandler(u *User, prefix string, args string) {
 		return
 	}
 
-	channelName := argv[0]
+	cName := argv[0]
 
-	channel, ok := u.channels[channelName]
+	c, ok := u.channels.Get(cName)
 	if ok {
-		//ya esta en el canal
-		return
+		return //ya esta en el canal
 	}
 
-	channel, ok = Channels[channelName]
+	c, ok = Channels.Get(cName)
 	if !ok {
-		tmp := &Channel{
-			name: channelName,
-			out: make(chan Msg),
-			users: make([]*User, 0, 1),
+		c = &Channel{
+			name: cName,
+			out: make(chan Msg, 100),
 		}
-		Channels[channelName] = tmp
-		channel = tmp
-		go sendtoChannel(channel)
+		c.users.Init()
+		Channels.Set(cName, c)
+		go sendtoChannel(c)
 	}
-	channel.usersM.Lock()
-	channel.users = append(channel.users, u)
-	channel.usersM.Unlock()
-
-	u.channelsM.Lock()
-	u.channels[channel.name] = channel
-	u.channelsM.Unlock()
+	c.users.Add(u)
+	u.channels.Set(cName, c)
 
 	//ahora la respuesta
-	//u.out <- fmt.Sprintf(":%s JOIN %s", u.nickname, channel.name)
-	channel.out <- Msg{u.nickname, fmt.Sprintf(":%s!%s@%s JOIN %s", u.nickname, u.username, u.hostname, channel.name)}
-	u.out <- fmt.Sprintf(":%s!%s@%s JOIN %s", u.nickname, u.username, u.hostname, channel.name)
+	c.out <- Msg{u,
+		fmt.Sprintf(":%s!%s@%s JOIN %s", u.nickname, u.username,
+			u.hostname, c.name),
+	}
+	u.out <- fmt.Sprintf(":%s!%s@%s JOIN %s", u.nickname, u.username,
+		u.hostname, c.name)
 
 	//motd
-	Replay(u.out, "bayerl.com.ar", "RPL_TOPIC", u.nickname, channel.name, "Hola")
+	Replay(u.out, "bayerl.com.ar", "RPL_TOPIC", u.nickname, c.name, "Hola")
 
 	//usuarios conectados
-	SendUserList(u, "bayerl.com.ar", channel)
+	SendUserList(u, "bayerl.com.ar", c)
 
 }
 
-func PrivmsgHandler(c *User, prefix string, args string) {
+func PrivmsgHandler(u *User, prefix string, args string) {
 	argv := strings.SplitN(args, " ", 2)
 	if len(argv) != 2 {
 		return
 	}
 
-	channelName := argv[0]
-	channel, ok := Channels[channelName]
+	cName := argv[0]
+	c, ok := Channels.Get(cName)
 	if !ok {
 		return
 	}
 
 	msg := strings.Trim(argv[1], ": ")
 
-	channel.out <- Msg{c.nickname, fmt.Sprintf(":%s!%s@%s PRIVMSG %s :%s", c.nickname, c.username, c.hostname, channel.name, msg)}
+	c.out <- Msg{
+		u,
+		fmt.Sprintf(":%s!%s@%s PRIVMSG %s :%s", u.nickname,
+		u.username, u.hostname, c.name, msg),
+	}
 }
 
 func PongHandler(user *User, prefix string, args string) {
 	return
 }
 
-func WhoHandler(user *User, prefix string, args string) {
+func WhoHandler(u *User, prefix string, args string) {
 	argv := strings.Split(args, " ")
 	if len(argv) == 0 {
 		return
 	}
 
 	//por ahora asumo que me esta pasando un canal
-	channelName := argv[0]
-	channel, ok := Channels[channelName]
+	cName := argv[0]
+	c, ok := Channels.Get(cName)
 	if !ok {
 		return
 	}
 
-	channel.usersM.Lock()
-	for _,u := range channel.users {
-		Replay(user.out, "bayerl.com.ar", "RPL_WHOREPLY", user.nickname, channel.name, u.username, u.hostname, "bayerl.com.ar", u.nickname, "H", "0", u.realname)
+	c.users.RLock()
+	for _, v := range c.users.s {
+		Replay(u.out, "bayerl.com.ar", "RPL_WHOREPLY", v.nickname,
+			c.name, v.username, v.hostname, "bayerl.com.ar",
+			v.nickname, "H", "0", v.realname)
 	}
-	channel.usersM.Unlock()
+	c.users.RUnlock()
 
-	Replay(user.out, "bayerl.com.ar", "RPL_ENDOFWHO", user.nickname, channel.name)
+	Replay(u.out, "bayerl.com.ar", "RPL_ENDOFWHO", u.nickname, c.name)
 
 }
 
-func PartHandler(user *User, prefix string, args string) {
+func PartHandler(u *User, prefix string, args string) {
 	argv := strings.Split(args, " :")
-
 	if len(argv) != 2 {
-		Replay(user.out, "bayerl.com.ar", "ERR_NEEDMOREPARAMS", user.nickname, "PART")
+		Replay(u.out, "bayerl.com.ar", "ERR_NEEDMOREPARAMS",
+			u.nickname, "PART")
 		return
 	}
 
 	channelsStr := strings.Split(strings.Trim(argv[0], " "), ",")
-
-	for _, i := range channelsStr {
+	for _, str := range channelsStr {
 		//busco el canal
-		channel, ok := Channels[i]
+		c, ok := Channels.Get(str)
 		if !ok {
-			Replay(user.out, "bayerl.com.ar", "ERR_NOSUCHCHANNEL", user.nickname, i)
+			Replay(u.out, "bayerl.com.ar", "ERR_NOSUCHCHANNEL",
+				u.nickname, str)
 			break
 		}
 
 		//busco el canal en el usuario
-		user.channelsM.RLock()
-		_, ok = user.channels[i]
-		user.channelsM.RUnlock()
+		_, ok = u.channels.Get(str)
 		if !ok {
-			Replay(user.out, "bayerl.com.ar", "ERR_NOTONCHANNEL", user.nickname, i)
+			Replay(u.out, "bayerl.com.ar", "ERR_NOTONCHANNEL",
+				u.nickname, str)
 			break
 		}
 
-		//elimino el usuario del canal y le mando un mensaje a todos en el canal
-		RemoveUserFromChannel(channel, user)
-		channel.out <- Msg{user.nickname,
-			fmt.Sprintf(":%s!%s@%s PART %s :%s", user.nickname, user.username, user.hostname, channel.name, argv[1])}
-		user.out <- fmt.Sprintf(":%s!%s@%s PART %s :%s", user.nickname, user.username, user.hostname, channel.name, argv[1])
+		//elimino el usuario del canal y le mando un mensaje
+		//a todos en el canal
+		c.users.Remove(u)
+		c.out <- Msg{
+			u,
+			fmt.Sprintf(":%s!%s@%s PART %s :%s", u.nickname,
+				u.username, u.hostname, c.name, argv[1]),
+		}
+
+		u.out <- fmt.Sprintf(":%s!%s@%s PART %s :%s", u.nickname,
+			u.username, u.hostname, c.name, argv[1])
 
 		//elimino el canal del usuario
-		user.channelsM.Lock()
-		delete(user.channels, i)
-		user.channelsM.Unlock()
+		u.channels.Lock()
+		delete(u.channels.s, str)
+		u.channels.Unlock()
 	}
 
 }
 
-func QuitHandler(user *User, prefix string, args string) {
+func QuitHandler(u *User, prefix string, args string) {
 	argv := strings.Split(args, " :")
 	var msg string
-	if len(argv) == 0 {
-		msg = ""
-	} else {
+	if len(argv) > 0 {
 		msg = argv[0]
 	}
 
-	//hay que enviar a cada canal el mensaje QUIT
-	for _, i := range user.channels {
-		i.out <- Msg{user.nickname,
-			fmt.Sprintf(":%s!%s@%s QUIT %s :%s", user.nickname, user.username, user.hostname, msg)}
-		user.out <- fmt.Sprintf(":%s!%s@%s ERROR :Closing Link: %s (Quit: %s)", user.nickname, user.username, user.hostname, user.hostname, msg)
-
-		RemoveUserFromChannel(i, user)
-	}
-
-	//elimino el usuario de la lista global
-	UsersLock.Lock()
-	for u := Users.Front(); u != nil; u = u.Next() {
-		if u.Value.(*User).nickname == user.nickname {
-			Users.Remove(u)
-			err := u.Value.(*User).conn.Close()
-			if err != nil {
-				log.Println(err)
-			}
-			close(u.Value.(*User).out)
-			break
+	//send to each user's channel the QUIT msg
+	u.channels.RLock()
+	for _, c := range u.channels.s {
+		c.out <- Msg{u,
+			fmt.Sprintf(":%s!%s@%s QUIT %s :%s", u.nickname,
+				u.username, u.hostname, msg),
 		}
+		u.out <- fmt.Sprintf(":%s!%s@%s ERROR :Closing Link: %s (Quit: %s)",
+			u.nickname, u.username, u.hostname, u.hostname, msg)
 	}
-	UsersLock.Unlock()
-
+	u.channels.RUnlock()
 	return
-
 }
