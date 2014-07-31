@@ -160,28 +160,25 @@ func PongHandler(user *User, prefix string, args string) {
 }
 
 func WhoHandler(u *User, prefix string, args string) {
+	//TODO: implement mask
 	argv := strings.Split(args, " ")
 	if len(argv) == 0 {
 		return
 	}
+	mask := argv[0]
 
-	//por ahora asumo que me esta pasando un canal
-	cName := argv[0]
-	c, ok := Channels.Get(cName)
-	if !ok {
-		return
+	u.channels.RLock()
+	for _, c := range u.channels.s {
+		c.users.RLock()
+		for _, v := range c.users.s {
+			Replay(u.out, "bayerl.com.ar", "RPL_WHOREPLY",
+			v.nickname, c.name, v.username, v.hostname,
+			"bayerl.com.ar", v.nickname, "H", "0", v.realname)
+		}
+		c.users.RUnlock()
 	}
-
-	c.users.RLock()
-	for _, v := range c.users.s {
-		Replay(u.out, "bayerl.com.ar", "RPL_WHOREPLY", v.nickname,
-			c.name, v.username, v.hostname, "bayerl.com.ar",
-			v.nickname, "H", "0", v.realname)
-	}
-	c.users.RUnlock()
-
-	Replay(u.out, "bayerl.com.ar", "RPL_ENDOFWHO", u.nickname, c.name)
-
+	u.channels.RUnlock()
+	Replay(u.out, "bayerl.com.ar", "RPL_ENDOFWHO", u.nickname, mask)
 }
 
 func PartHandler(u *User, prefix string, args string) {
