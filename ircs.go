@@ -150,8 +150,18 @@ func listenClient(u *User) {
 }
 
 func removeUser(u *User) {
-	// send messages to user channels
+	// removes user from global channels' set
 	Channels.RLock()
+	for _, c := range Channels.s {
+		c.users.Remove(u)
+	}
+	Channels.RUnlock()
+
+	// removes user from global users set
+	Users.Remove(u)
+
+	// send messages to user channels
+	u.channels.RLock()
 	for _, c := range u.channels.s {
 		c.out <- Msg{
 			u,
@@ -163,17 +173,7 @@ func removeUser(u *User) {
 			u.nickname, u.username, u.hostname,
 			u.hostname, "Timeout")
 	}
-	Channels.RUnlock()
-
-	// removes user from global channels' set
-	Channels.RLock()
-	for _, c := range Channels.s {
-		c.users.Remove(u)
-	}
-	Channels.RUnlock()
-
-	// removes user from global users set
-	Users.Remove(u)
+	u.channels.RUnlock()
 
 	err := u.conn.Close()
 	if err != nil {

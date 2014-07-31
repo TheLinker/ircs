@@ -51,8 +51,7 @@ func NickHandler(u *User, prefix string, args string) {
 	//se lo mandamos a los canales del usuario
 	u.channels.RLock()
 	for _, c := range u.channels.s {
-		c.out <- Msg{
-			u,
+		c.out <- Msg{u,
 			fmt.Sprintf(":%s!%s@%s NICK %s", u.nickname,
 				u.username, u.hostname, args),
 		}
@@ -89,8 +88,8 @@ func UserHandler(u *User, prefix string, args string) {
 		u.nickname, "bayerl.com.ar", "0.0.0.0.0.0.1", "*", "*")
 }
 
-func PingHandler(c *User, prefix string, args string) {
-	c.out <- fmt.Sprintf("PONG %s", args)
+func PingHandler(u *User, prefix string, args string) {
+	u.out <- fmt.Sprintf("PONG %s", args)
 }
 
 func JoinHandler(u *User, prefix string, args string) {
@@ -110,7 +109,7 @@ func JoinHandler(u *User, prefix string, args string) {
 	if !ok {
 		c = &Channel{
 			name: cName,
-			out: make(chan Msg),
+			out: make(chan Msg, 100),
 		}
 		c.users.Init()
 		Channels.Set(cName, c)
@@ -120,9 +119,7 @@ func JoinHandler(u *User, prefix string, args string) {
 	u.channels.Set(cName, c)
 
 	//ahora la respuesta
-	//u.out <- fmt.Sprintf(":%s JOIN %s", u.nickname, channel.name)
-	c.out <- Msg{
-		u,
+	c.out <- Msg{u,
 		fmt.Sprintf(":%s!%s@%s JOIN %s", u.nickname, u.username,
 			u.hostname, c.name),
 	}
@@ -176,10 +173,10 @@ func WhoHandler(u *User, prefix string, args string) {
 	}
 
 	c.users.RLock()
-	for _,u := range c.users.s {
-		Replay(u.out, "bayerl.com.ar", "RPL_WHOREPLY", u.nickname,
-			c.name, u.username, u.hostname, "bayerl.com.ar",
-			u.nickname, "H", "0", u.realname)
+	for _, v := range c.users.s {
+		Replay(u.out, "bayerl.com.ar", "RPL_WHOREPLY", v.nickname,
+			c.name, v.username, v.hostname, "bayerl.com.ar",
+			v.nickname, "H", "0", v.realname)
 	}
 	c.users.RUnlock()
 
@@ -221,6 +218,7 @@ func PartHandler(u *User, prefix string, args string) {
 			fmt.Sprintf(":%s!%s@%s PART %s :%s", u.nickname,
 				u.username, u.hostname, c.name, argv[1]),
 		}
+
 		u.out <- fmt.Sprintf(":%s!%s@%s PART %s :%s", u.nickname,
 			u.username, u.hostname, c.name, argv[1])
 
@@ -239,24 +237,16 @@ func QuitHandler(u *User, prefix string, args string) {
 		msg = argv[0]
 	}
 
-	//send to each user's channel the QUIT msg and remove user from channel
+	//send to each user's channel the QUIT msg
 	u.channels.RLock()
 	for _, c := range u.channels.s {
-		c.out <- Msg{
-			u,
+		c.out <- Msg{u,
 			fmt.Sprintf(":%s!%s@%s QUIT %s :%s", u.nickname,
 				u.username, u.hostname, msg),
 		}
 		u.out <- fmt.Sprintf(":%s!%s@%s ERROR :Closing Link: %s (Quit: %s)",
 			u.nickname, u.username, u.hostname, u.hostname, msg)
-
-		// removes user from channel
-		c.users.Remove(u)
 	}
 	u.channels.RUnlock()
-
-	//removes user from global Users
-	Users.Remove(u)
-
 	return
 }
