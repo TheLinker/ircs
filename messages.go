@@ -134,22 +134,35 @@ func JoinHandler(u *User, prefix string, args string) {
 
 }
 
+func userMessage(u *User, nick, msg string) {
+	u.channels.RLock()
+	for _, c := range u.channels.s {
+		target := c.users.FindByNick(nick)
+		if target != nil {
+			target.out <- fmt.Sprintf(":%s!%s@%s PRIVMSG %s :%s",
+				u.nickname, u.username, u.hostname,
+				nick, msg)
+		}
+	}
+	u.channels.RUnlock()
+}
+
 func PrivmsgHandler(u *User, prefix string, args string) {
 	argv := strings.SplitN(args, " ", 2)
 	if len(argv) != 2 {
 		return
 	}
 
-	cName := argv[0]
-	c, ok := Channels.Get(cName)
+	msg := strings.Trim(argv[1], ": ")
+	name := argv[0]
+	c, ok := Channels.Get(name)
 	if !ok {
+		// it's not a channel, could be a user
+		userMessage(u, name, msg)
 		return
 	}
 
-	msg := strings.Trim(argv[1], ": ")
-
-	c.out <- Msg{
-		u,
+	c.out <- Msg{u,
 		fmt.Sprintf(":%s!%s@%s PRIVMSG %s :%s", u.nickname,
 		u.username, u.hostname, c.name, msg),
 	}
