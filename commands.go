@@ -147,6 +147,8 @@ var Responses = map[string]response{
 	"ERR_NOOPERHOST":        {"491 :No O-lines for your host", 0},
 	"ERR_UMODEUNKNOWNFLAG":  {"501 :Unknown MODE flag", 0},
 	"ERR_USERSDONTMATCH":    {"502 :Cannot change mode for other users", 0},
+
+	"ERR_ILLEGALCHANNAME": {"479 %s %s :Illegal channel name", 2},
 }
 
 func Replay(out chan string, prefix string, message string, argv ...interface{}) {

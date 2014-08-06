@@ -22,7 +22,7 @@ var CommandHandlers = map[string]func(c *User, prefix string, args string){
 func NickHandler(u *User, prefix string, args string) {
 	if len(args) == 0 {
 		Replay(u.out, "bayerl.com.ar",
-			"ERR_NONICKNAMEGIVEN",u.nickname)
+			"ERR_NONICKNAMEGIVEN", u.nickname)
 		return
 	}
 
@@ -72,9 +72,10 @@ func UserHandler(u *User, prefix string, args string) {
 	u.username = argv[0]
 	u.realname = strings.Trim(argv[3], " :")
 
-	host, err := net.LookupAddr(u.conn.RemoteAddr().String())
+	addr := strings.SplitN(u.conn.RemoteAddr().String(), ":", 2)[0]
+	host, err := net.LookupAddr(addr)
 	if err != nil {
-		u.hostname = u.conn.RemoteAddr().String()
+		u.hostname = addr
 	} else {
 		u.hostname = host[0]
 	}
@@ -100,6 +101,14 @@ func JoinHandler(u *User, prefix string, args string) {
 
 	cName := argv[0]
 
+	chanPattern := "^[\\[&#+'][^ \x07,:]{0,49}$"
+	matched, _ := regexp.MatchString(chanPattern, argv[0])
+	if !matched {
+		Replay(u.out, "bayerl.com.ar",
+			"ERR_ILLEGALCHANNAME", u.nickname, argv[0])
+		return
+	}
+
 	c, ok := u.channels.Get(cName)
 	if ok {
 		return //ya esta en el canal
@@ -108,8 +117,9 @@ func JoinHandler(u *User, prefix string, args string) {
 	c, ok = Channels.Get(cName)
 	if !ok {
 		c = &Channel{
-			name: cName,
-			out: make(chan Msg, 100),
+			name:  cName,
+			topic: "",
+			out:   make(chan Msg, 100),
 		}
 		c.users.Init()
 		Channels.Set(cName, c)
@@ -127,7 +137,9 @@ func JoinHandler(u *User, prefix string, args string) {
 		u.hostname, c.name)
 
 	//motd
-	Replay(u.out, "bayerl.com.ar", "RPL_TOPIC", u.nickname, c.name, "Hola")
+	if len(c.topic) != 0 {
+		Replay(u.out, "bayerl.com.ar", "RPL_TOPIC", u.nickname, c.name, c.topic)
+	}
 
 	//usuarios conectados
 	SendUserList(u, "bayerl.com.ar", c)
@@ -160,7 +172,7 @@ func PrivmsgHandler(u *User, prefix string, args string) {
 
 	c.out <- Msg{u,
 		fmt.Sprintf(":%s!%s@%s PRIVMSG %s :%s", u.nickname,
-		u.username, u.hostname, c.name, msg),
+			u.username, u.hostname, c.name, msg),
 	}
 }
 
@@ -181,8 +193,8 @@ func WhoHandler(u *User, prefix string, args string) {
 		c.users.RLock()
 		for _, v := range c.users.s {
 			Replay(u.out, "bayerl.com.ar", "RPL_WHOREPLY",
-			v.nickname, c.name, v.username, v.hostname,
-			"bayerl.com.ar", v.nickname, "H", "0", v.realname)
+				v.nickname, c.name, v.username, v.hostname,
+				"bayerl.com.ar", v.nickname, "H", "0", v.realname)
 		}
 		c.users.RUnlock()
 	}

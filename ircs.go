@@ -50,7 +50,9 @@ func listenClient(u *User) {
 		}
 
 		msg := strings.TrimRight(string(line), "\r\n")
-		log.Println(u.nickname + "\t-> " + msg)
+		if !strings.Contains(msg, "PING") && !strings.Contains(msg, "PONG") {
+			log.Println(u.nickname + "\t-> " + msg)
+		}
 		u.conn.SetDeadline(time.Now().Add(time.Second * 30))
 		parseCommand(msg, u)
 	}
@@ -115,7 +117,9 @@ func sendtoClient(u *User) {
 		case <-pinger.C:
 			msg = "PING :" + u.nickname
 		}
-		log.Println(u.nickname + "\t<- " + msg)
+		if !strings.Contains(msg, "PING") && !strings.Contains(msg, "PONG") {
+			log.Println(u.nickname + "\t<- " + msg)
+		}
 		msg += "\r\n"
 		_, err := u.conn.Write([]byte(msg))
 		if err != nil {
