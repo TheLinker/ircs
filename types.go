@@ -7,6 +7,15 @@ import (
 	"unicode"
 )
 
+type ConnStatus int
+
+const (
+	CONN_ESTABLISHED = iota
+	CONN_PASS_OK
+	CONN_NICK_OK
+	CONN_CONNECTED
+)
+
 var IRCCase = unicode.SpecialCase{
 	unicode.CaseRange{0x5b, 0x5b, [unicode.MaxCase]rune{0, 0x7b - 0x5b, 0}},           //[ U -> { L
 	unicode.CaseRange{0x5c, 0x5c, [unicode.MaxCase]rune{0, 0x7c - 0x5c, 0}},           //\ U -> | L
@@ -60,6 +69,7 @@ type User struct {
 	hostname string
 	out      chan string
 	channels ChannelsSet
+	status   ConnStatus
 }
 
 type UsersSet struct {
@@ -102,3 +112,13 @@ func (users *UsersSet) Add(u *User) {
 	users.s = append(users.s, u)
 	users.Unlock()
 }
+
+type Server struct {
+	password string
+	hostname string
+	name     string
+	version  string
+	created  string
+}
+
+var server Server

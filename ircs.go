@@ -34,7 +34,12 @@ func parseCommand(message string, u *User) {
 
 	handler, ok := CommandHandlers[command]
 	if ok {
-		handler(u, prefix, argv)
+		if u.status >= handler.minConStatus {
+			handler.handler(u, prefix, argv)
+		} else {
+			Replay(u.out, server.hostname,
+				"ERR_NOTREGISTERED", u.nickname)
+		}
 	} else {
 		log.Println("Command not found: " + command)
 	}
@@ -56,7 +61,7 @@ func listenClient(u *User) {
 		u.conn.SetDeadline(time.Now().Add(time.Second * 30))
 		parseCommand(msg, u)
 	}
-	log.Println("removing user: ", u.nickname)
+	log.Println("Removing user: ", u.nickname)
 	removeUser(u)
 }
 
@@ -115,16 +120,20 @@ func sendtoClient(u *User) {
 		select {
 		case msg = <-u.out:
 		case <-pinger.C:
-			msg = "PING :" + u.nickname
+			if u.status == CONN_CONNECTED {
+				msg = "PING :" + u.nickname
+			}
 		}
-		if !strings.Contains(msg, "PING") && !strings.Contains(msg, "PONG") {
-			log.Println(u.nickname + "\t<- " + msg)
-		}
-		msg += "\r\n"
-		_, err := u.conn.Write([]byte(msg))
-		if err != nil {
-			log.Println(err)
-			break
+		if len(msg) != 0 {
+			if !strings.Contains(msg, "PING") && !strings.Contains(msg, "PONG") {
+				log.Println(u.nickname + "\t<- " + msg)
+			}
+			msg += "\r\n"
+			_, err := u.conn.Write([]byte(msg))
+			if err != nil {
+				log.Println(err)
+				break
+			}
 		}
 	}
 	pinger.Stop()
@@ -133,6 +142,12 @@ func sendtoClient(u *User) {
 func main() {
 	Users.Init()
 	Channels.Init()
+
+	server.created = time.Now().Format("2006/01/02 15:04:05")
+	//llenar con configfile, pero bueh
+	server.hostname = "bayerl.com.ar"
+	server.name = "MyIRCServer"
+	server.version = "0.0.0.0.0.0.0.1"
 
 	// Listen on TCP port 2000 on all interfaces.
 	l, err := net.Listen("tcp", ":2000")
@@ -152,6 +167,12 @@ func main() {
 		user.conn = conn
 		user.out = make(chan string, 20)
 		user.channels.Init()
+		if len(server.password) == 0 {
+			user.status = CONN_PASS_OK
+		} else {
+			user.status = CONN_ESTABLISHED
+		}
+		log.Println("Connection from: " + conn.RemoteAddr().String())
 
 		Users.Add(user)
 

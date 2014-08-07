@@ -7,21 +7,49 @@ import (
 	"strings"
 )
 
-var CommandHandlers = map[string]func(c *User, prefix string, args string){
-	"NICK":    NickHandler,
-	"USER":    UserHandler,
-	"PING":    PingHandler,
-	"PONG":    PongHandler,
-	"JOIN":    JoinHandler,
-	"PRIVMSG": PrivmsgHandler,
-	"WHO":     WhoHandler,
-	"PART":    PartHandler,
-	"QUIT":    QuitHandler,
+type MsgHandler func(c *User, prefix string, args string)
+
+type HandlerType struct {
+	handler      MsgHandler
+	minConStatus ConnStatus
+}
+
+var CommandHandlers = map[string]HandlerType{
+	"PASS":    {PassHandler, CONN_ESTABLISHED},
+	"NICK":    {NickHandler, CONN_PASS_OK},
+	"USER":    {UserHandler, CONN_NICK_OK},
+	"PING":    {PingHandler, CONN_CONNECTED},
+	"PONG":    {PongHandler, CONN_CONNECTED},
+	"JOIN":    {JoinHandler, CONN_CONNECTED},
+	"PRIVMSG": {PrivmsgHandler, CONN_CONNECTED},
+	"WHO":     {WhoHandler, CONN_CONNECTED},
+	"PART":    {PartHandler, CONN_CONNECTED},
+	"QUIT":    {QuitHandler, CONN_CONNECTED},
+}
+
+func PassHandler(u *User, prefix string, args string) {
+	if u.status > CONN_ESTABLISHED {
+		Replay(u.out, server.hostname,
+			"ERR_ALREADYREGISTRED", u.nickname)
+	}
+
+	if len(args) == 0 {
+		Replay(u.out, server.hostname,
+			"ERR_NEEDMOREPARAMS", u.nickname)
+	}
+
+	if server.password != args {
+		Replay(u.out, server.hostname,
+			"ERR_PASSWDMISMATCH", u.nickname)
+	}
+
+	//pass es correcto se ve
+	u.status = CONN_PASS_OK
 }
 
 func NickHandler(u *User, prefix string, args string) {
 	if len(args) == 0 {
-		Replay(u.out, "bayerl.com.ar",
+		Replay(u.out, server.hostname,
 			"ERR_NONICKNAMEGIVEN", u.nickname)
 		return
 	}
@@ -29,13 +57,13 @@ func NickHandler(u *User, prefix string, args string) {
 	nickPattern := "^[a-zA-Z\\[\\]_^`{}|][a-zA-Z0-9\\[\\]_^`{}|-]{0,8}$"
 	matched, _ := regexp.MatchString(nickPattern, args)
 	if !matched {
-		Replay(u.out, "bayerl.com.ar",
+		Replay(u.out, server.hostname,
 			"ERR_ERRONEUSNICKNAME", u.nickname, args)
 		return
 	}
 
 	if Users.FindByNick(args) != nil {
-		Replay(u.out, "bayerl.com.ar",
+		Replay(u.out, server.hostname,
 			"ERR_NICKNAMEINUSE", u.nickname, args)
 		return
 	}
@@ -59,12 +87,18 @@ func NickHandler(u *User, prefix string, args string) {
 	u.channels.RUnlock()
 
 	u.nickname = args
+	u.status = CONN_NICK_OK
 }
 
 func UserHandler(u *User, prefix string, args string) {
+	if u.status == CONN_CONNECTED {
+		Replay(u.out, server.hostname,
+			"ERR_ALREADYREGISTRED", u.nickname)
+		return
+	}
 	argv := strings.SplitN(args, " ", 4)
 	if len(argv) < 4 {
-		Replay(u.out, "bayerl.com.ar",
+		Replay(u.out, server.hostname,
 			"ERR_NEEDMOREPARAMS", u.nickname, "USER")
 		return
 	}
@@ -80,13 +114,15 @@ func UserHandler(u *User, prefix string, args string) {
 		u.hostname = host[0]
 	}
 
-	Replay(u.out, "bayerl.com.ar", "RPL_WELCOME",
+	Replay(u.out, server.hostname, "RPL_WELCOME",
 		u.nickname, u.nickname, u.username, u.hostname)
-	Replay(u.out, "bayerl.com.ar", "RPL_YOURHOST",
-		u.nickname, "MyIRCServer", "0.0.0.0.0.0.1")
-	Replay(u.out, "bayerl.com.ar", "RPL_CREATED", u.nickname, "2014/07/26")
-	Replay(u.out, "bayerl.com.ar", "RPL_MYINFO",
-		u.nickname, "bayerl.com.ar", "0.0.0.0.0.0.1", "*", "*")
+	Replay(u.out, server.hostname, "RPL_YOURHOST",
+		u.nickname, server.name, server.version)
+	Replay(u.out, server.hostname, "RPL_CREATED", u.nickname, server.created)
+	Replay(u.out, server.hostname, "RPL_MYINFO",
+		u.nickname, server.hostname, server.version, "*", "*")
+
+	u.status = CONN_CONNECTED
 }
 
 func PingHandler(u *User, prefix string, args string) {
@@ -104,7 +140,7 @@ func JoinHandler(u *User, prefix string, args string) {
 	chanPattern := "^[\\[&#+'][^ \x07,:]{0,49}$"
 	matched, _ := regexp.MatchString(chanPattern, argv[0])
 	if !matched {
-		Replay(u.out, "bayerl.com.ar",
+		Replay(u.out, server.hostname,
 			"ERR_ILLEGALCHANNAME", u.nickname, argv[0])
 		return
 	}
@@ -138,20 +174,23 @@ func JoinHandler(u *User, prefix string, args string) {
 
 	//motd
 	if len(c.topic) != 0 {
-		Replay(u.out, "bayerl.com.ar", "RPL_TOPIC", u.nickname, c.name, c.topic)
+		Replay(u.out, server.hostname, "RPL_TOPIC", u.nickname, c.name, c.topic)
 	}
 
 	//usuarios conectados
-	SendUserList(u, "bayerl.com.ar", c)
+	SendUserList(u, server.hostname, c)
 
 }
 
 func userMessage(u *User, nick, msg string) {
 	target := Users.FindByNick(nick)
 	if target != nil {
-		target.out <- fmt.Sprintf(":%s!%s@%s PRIVMSG %s :%s",
-			u.nickname, u.username, u.hostname,
-			nick, msg)
+		//solo se le puede mandar mensajes si completo el registro
+		if target.status == CONN_CONNECTED {
+			target.out <- fmt.Sprintf(":%s!%s@%s PRIVMSG %s :%s",
+				u.nickname, u.username, u.hostname,
+				nick, msg)
+		}
 	}
 }
 
@@ -192,20 +231,20 @@ func WhoHandler(u *User, prefix string, args string) {
 	for _, c := range u.channels.s {
 		c.users.RLock()
 		for _, v := range c.users.s {
-			Replay(u.out, "bayerl.com.ar", "RPL_WHOREPLY",
+			Replay(u.out, server.hostname, "RPL_WHOREPLY",
 				v.nickname, c.name, v.username, v.hostname,
-				"bayerl.com.ar", v.nickname, "H", "0", v.realname)
+				server.hostname, v.nickname, "H", "0", v.realname)
 		}
 		c.users.RUnlock()
 	}
 	u.channels.RUnlock()
-	Replay(u.out, "bayerl.com.ar", "RPL_ENDOFWHO", u.nickname, mask)
+	Replay(u.out, server.hostname, "RPL_ENDOFWHO", u.nickname, mask)
 }
 
 func PartHandler(u *User, prefix string, args string) {
 	argv := strings.Split(args, " :")
 	if len(argv) != 2 {
-		Replay(u.out, "bayerl.com.ar", "ERR_NEEDMOREPARAMS",
+		Replay(u.out, server.hostname, "ERR_NEEDMOREPARAMS",
 			u.nickname, "PART")
 		return
 	}
@@ -215,7 +254,7 @@ func PartHandler(u *User, prefix string, args string) {
 		//busco el canal
 		c, ok := Channels.Get(str)
 		if !ok {
-			Replay(u.out, "bayerl.com.ar", "ERR_NOSUCHCHANNEL",
+			Replay(u.out, server.hostname, "ERR_NOSUCHCHANNEL",
 				u.nickname, str)
 			break
 		}
@@ -223,7 +262,7 @@ func PartHandler(u *User, prefix string, args string) {
 		//busco el canal en el usuario
 		_, ok = u.channels.Get(str)
 		if !ok {
-			Replay(u.out, "bayerl.com.ar", "ERR_NOTONCHANNEL",
+			Replay(u.out, server.hostname, "ERR_NOTONCHANNEL",
 				u.nickname, str)
 			break
 		}

@@ -18,12 +18,12 @@ type response struct {
 var Responses = map[string]response{
 	"RPL_WELCOME":           {"001 %s :Welcome to the Internet Relay Network %s!%s@%s", 4}, //impl
 	"RPL_YOURHOST":          {"002 %s :Your host is %s, running version %s", 3},            //impl
-	"RPL_CREATED":           {"003 %s :This server was created %s", 2},                     //impl
+	"RPL_CREATED":           {"003 %s :This server was created on %s", 2},                  //impl
 	"RPL_MYINFO":            {"004 %s %s %s %s %s", 5},                                     //impl
 	"RPL_BOUNCE":            {"005 %s :Try server %s, port %s", 3},
 	"RPL_AWAY":              {"301 %s :%s", 2},
-	"RPL_UNAWAY":            {"305 :You are no longer marked as being away", 0},
-	"RPL_NOWAWAY":           {"306 :You have been marked as being away", 0},
+	"RPL_UNAWAY":            {"305 %s :You are no longer marked as being away", 1}, //impl
+	"RPL_NOWAWAY":           {"306 %s :You have been marked as being away", 1},     //impl
 	"RPL_WHOISUSER":         {"311 %s %s %s * :%s", 4},
 	"RPL_WHOISSERVER":       {"312 %s %s :%s", 3},
 	"RPL_WHOISOPERATOR":     {"313 %s :is an IRC operator", 1},
@@ -124,12 +124,12 @@ var Responses = map[string]response{
 	"ERR_SUMMONDISABLED":    {"445 :SUMMON has been disabled", 0},
 	"ERR_USERSDISABLED":     {"446 :USERS has been disabled", 0},
 	"ERR_NOTREGISTERED":     {"451 :You have not registered", 0},
-	"ERR_NEEDMOREPARAMS":    {"461 %s %s :Not enough parameters", 1}, //impl
-	"ERR_ALREADYREGISTRED":  {"462 :Unauthorized command (already registered)", 0},
-	"ERR_NOPERMFORHOST":     {"463 :Your host isn't among the privileged", 0},
-	"ERR_PASSWDMISMATCH":    {"464 :Password incorrect", 0},
-	"ERR_YOUREBANNEDCREEP":  {"465 :You are banned from this server", 0},
-	"ERR_YOUWILLBEBANNED":   {"466", 0},
+	"ERR_NEEDMOREPARAMS":    {"461 %s %s :Not enough parameters", 1},                  //impl
+	"ERR_ALREADYREGISTRED":  {"462 %s :Unauthorized command (already registered)", 1}, //impl
+	"ERR_NOPERMFORHOST":     {"463 %s :Your host isn't among the privileged", 1},      //impl
+	"ERR_PASSWDMISMATCH":    {"464 %s :Password incorrect", 1},                        //impl
+	"ERR_YOUREBANNEDCREEP":  {"465 %s :You are banned from this server", 1},           //impl
+	"ERR_YOUWILLBEBANNED":   {"466 %s", 1},                                            //impl
 	"ERR_KEYSET":            {"467 %s :Channel key already set", 1},
 	"ERR_CHANNELISFULL":     {"471 %s :Cannot join channel (+l)", 1},
 	"ERR_UNKNOWNMODE":       {"472 %s :is unknown mode char to me for %s", 2},
