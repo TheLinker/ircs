@@ -1,0 +1,6 @@
+{
+    "Hostname": "bayerl.com.ar",
+    "Name": "MyIRCServer",
+    "Version": "0.0.0.0.0.0.0.1",
+    "ListenAddr": ":2000"
+}

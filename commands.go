@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"strings"
+	"log"
 )
 
 type response struct {
@@ -35,8 +36,8 @@ var Responses = map[string]response{
 	"RPL_LISTEND":           {"323 :End of LIST", 0},
 	"RPL_UNIQOPIS":          {"325 %s %s", 2},
 	"RPL_CHANNELMODEIS":     {"324 %s %s %s", 3}, //impl
-	"RPL_NOTOPIC":           {"331 %s :No topic is set", 1},
-	"RPL_TOPIC":             {"332 %s %s :%s", 3},
+	"RPL_NOTOPIC":           {"331 %s :No topic is set", 1}, //impl
+	"RPL_TOPIC":             {"332 %s %s :%s", 3}, //impl
 	"RPL_INVITING":          {"341 %s %s", 2},
 	"RPL_SUMMONING":         {"342 %s :Summoning user to IRC", 1},
 	"RPL_INVITELIST":        {"346 %s %s", 2},
@@ -155,10 +156,12 @@ func Replay(out chan string, prefix string, message string, argv ...interface{})
 	var r string
 	resp, ok := Responses[message]
 	if !ok {
+		log.Println(ok)
 		return
 	}
 
 	if len(argv) != resp.argc {
+		log.Println(message, resp.argc, len(argv))
 		return
 	}
 

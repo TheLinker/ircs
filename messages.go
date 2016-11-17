@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"net"
 	"regexp"
 	"strings"
@@ -25,21 +26,22 @@ var CommandHandlers = map[string]HandlerType{
 	"WHO":     {WhoHandler, CONN_CONNECTED},
 	"PART":    {PartHandler, CONN_CONNECTED},
 	"QUIT":    {QuitHandler, CONN_CONNECTED},
+	"TOPIC":   {TopicHandler, CONN_CONNECTED},
 }
 
 func PassHandler(u *User, prefix string, args string) {
 	if u.status > CONN_ESTABLISHED {
-		Replay(u.out, server.hostname,
+		Replay(u.out, server.Hostname,
 			"ERR_ALREADYREGISTRED", u.nickname)
 	}
 
 	if len(args) == 0 {
-		Replay(u.out, server.hostname,
+		Replay(u.out, server.Hostname,
 			"ERR_NEEDMOREPARAMS", u.nickname)
 	}
 
-	if server.password != args {
-		Replay(u.out, server.hostname,
+	if server.Password != args {
+		Replay(u.out, server.Hostname,
 			"ERR_PASSWDMISMATCH", u.nickname)
 	}
 
@@ -49,21 +51,21 @@ func PassHandler(u *User, prefix string, args string) {
 
 func NickHandler(u *User, prefix string, args string) {
 	if len(args) == 0 {
-		Replay(u.out, server.hostname,
+		Replay(u.out, server.Hostname,
 			"ERR_NONICKNAMEGIVEN", u.nickname)
 		return
 	}
 
-	nickPattern := "^[a-zA-Z\\[\\]_^`{}|][a-zA-Z0-9\\[\\]_^`{}|-]{0,8}$"
+	nickPattern := "^[a-zA-Z\\[\\]_^`{}|][a-zA-Z0-9\\[\\]_^`{}|-]{0,15}$"
 	matched, _ := regexp.MatchString(nickPattern, args)
 	if !matched {
-		Replay(u.out, server.hostname,
+		Replay(u.out, server.Hostname,
 			"ERR_ERRONEUSNICKNAME", u.nickname, args)
 		return
 	}
 
-	if Users.FindByNick(args) != nil {
-		Replay(u.out, server.hostname,
+	if server.users.FindByNick(args) != nil {
+		Replay(u.out, server.Hostname,
 			"ERR_NICKNAMEINUSE", u.nickname, args)
 		return
 	}
@@ -92,13 +94,13 @@ func NickHandler(u *User, prefix string, args string) {
 
 func UserHandler(u *User, prefix string, args string) {
 	if u.status == CONN_CONNECTED {
-		Replay(u.out, server.hostname,
+		Replay(u.out, server.Hostname,
 			"ERR_ALREADYREGISTRED", u.nickname)
 		return
 	}
 	argv := strings.SplitN(args, " ", 4)
 	if len(argv) < 4 {
-		Replay(u.out, server.hostname,
+		Replay(u.out, server.Hostname,
 			"ERR_NEEDMOREPARAMS", u.nickname, "USER")
 		return
 	}
@@ -114,13 +116,13 @@ func UserHandler(u *User, prefix string, args string) {
 		u.hostname = host[0]
 	}
 
-	Replay(u.out, server.hostname, "RPL_WELCOME",
+	Replay(u.out, server.Hostname, "RPL_WELCOME",
 		u.nickname, u.nickname, u.username, u.hostname)
-	Replay(u.out, server.hostname, "RPL_YOURHOST",
-		u.nickname, server.name, server.version)
-	Replay(u.out, server.hostname, "RPL_CREATED", u.nickname, server.created)
-	Replay(u.out, server.hostname, "RPL_MYINFO",
-		u.nickname, server.hostname, server.version, "*", "*")
+	Replay(u.out, server.Hostname, "RPL_YOURHOST",
+		u.nickname, server.Name, server.Version)
+	Replay(u.out, server.Hostname, "RPL_CREATED", u.nickname, server.Created)
+	Replay(u.out, server.Hostname, "RPL_MYINFO",
+		u.nickname, server.Hostname, server.Version, "*", "*")
 
 	u.status = CONN_CONNECTED
 }
@@ -140,7 +142,7 @@ func JoinHandler(u *User, prefix string, args string) {
 	chanPattern := "^[\\[&#+'][^ \x07,:]{0,49}$"
 	matched, _ := regexp.MatchString(chanPattern, argv[0])
 	if !matched {
-		Replay(u.out, server.hostname,
+		Replay(u.out, server.Hostname,
 			"ERR_ILLEGALCHANNAME", u.nickname, argv[0])
 		return
 	}
@@ -150,7 +152,7 @@ func JoinHandler(u *User, prefix string, args string) {
 		return //ya esta en el canal
 	}
 
-	c, ok = Channels.Get(cName)
+	c, ok = server.channels.Get(cName)
 	if !ok {
 		c = &Channel{
 			name:  cName,
@@ -158,7 +160,7 @@ func JoinHandler(u *User, prefix string, args string) {
 			out:   make(chan Msg, 100),
 		}
 		c.users.Init()
-		Channels.Set(cName, c)
+		server.channels.Set(cName, c)
 		go sendtoChannel(c)
 	}
 	c.users.Add(u)
@@ -174,16 +176,15 @@ func JoinHandler(u *User, prefix string, args string) {
 
 	//motd
 	if len(c.topic) != 0 {
-		Replay(u.out, server.hostname, "RPL_TOPIC", u.nickname, c.name, c.topic)
+		Replay(u.out, server.Hostname, "RPL_TOPIC", u.nickname, c.name, c.topic)
 	}
 
 	//usuarios conectados
-	SendUserList(u, server.hostname, c)
-
+	SendUserList(u, server.Hostname, c)
 }
 
 func userMessage(u *User, nick, msg string) {
-	target := Users.FindByNick(nick)
+	target := server.users.FindByNick(nick)
 	if target != nil {
 		//solo se le puede mandar mensajes si completo el registro
 		if target.status == CONN_CONNECTED {
@@ -202,17 +203,14 @@ func PrivmsgHandler(u *User, prefix string, args string) {
 
 	msg := strings.Trim(argv[1], ": ")
 	name := argv[0]
-	c, ok := Channels.Get(name)
+	c, ok := server.channels.Get(name)
 	if !ok {
 		// it's not a channel, could be a user
 		userMessage(u, name, msg)
 		return
 	}
 
-	c.out <- Msg{u,
-		fmt.Sprintf(":%s!%s@%s PRIVMSG %s :%s", u.nickname,
-			u.username, u.hostname, c.name, msg),
-	}
+	c.out <- Msg{u, fmt.Sprintf(":%s!%s@%s PRIVMSG %s :%s", u.nickname, u.username, u.hostname, c.name, msg)}
 }
 
 func PongHandler(user *User, prefix string, args string) {
@@ -231,30 +229,34 @@ func WhoHandler(u *User, prefix string, args string) {
 	for _, c := range u.channels.s {
 		c.users.RLock()
 		for _, v := range c.users.s {
-			Replay(u.out, server.hostname, "RPL_WHOREPLY",
+			Replay(u.out, server.Hostname, "RPL_WHOREPLY",
 				v.nickname, c.name, v.username, v.hostname,
-				server.hostname, v.nickname, "H", "0", v.realname)
+				server.Hostname, v.nickname, "H", "0", v.realname)
 		}
 		c.users.RUnlock()
 	}
 	u.channels.RUnlock()
-	Replay(u.out, server.hostname, "RPL_ENDOFWHO", u.nickname, mask)
+	Replay(u.out, server.Hostname, "RPL_ENDOFWHO", u.nickname, mask)
 }
 
 func PartHandler(u *User, prefix string, args string) {
+	log.Println(args)
 	argv := strings.Split(args, " :")
-	if len(argv) != 2 {
-		Replay(u.out, server.hostname, "ERR_NEEDMOREPARAMS",
+	partMsg := ""
+	if len(argv) == 0 {
+		Replay(u.out, server.Hostname, "ERR_NEEDMOREPARAMS",
 			u.nickname, "PART")
 		return
+	} else if len(argv) > 1 {
+		partMsg = ":" + argv[1]
 	}
 
 	channelsStr := strings.Split(strings.Trim(argv[0], " "), ",")
 	for _, str := range channelsStr {
 		//busco el canal
-		c, ok := Channels.Get(str)
+		c, ok := server.channels.Get(str)
 		if !ok {
-			Replay(u.out, server.hostname, "ERR_NOSUCHCHANNEL",
+			Replay(u.out, server.Hostname, "ERR_NOSUCHCHANNEL",
 				u.nickname, str)
 			break
 		}
@@ -262,7 +264,7 @@ func PartHandler(u *User, prefix string, args string) {
 		//busco el canal en el usuario
 		_, ok = u.channels.Get(str)
 		if !ok {
-			Replay(u.out, server.hostname, "ERR_NOTONCHANNEL",
+			Replay(u.out, server.Hostname, "ERR_NOTONCHANNEL",
 				u.nickname, str)
 			break
 		}
@@ -272,19 +274,20 @@ func PartHandler(u *User, prefix string, args string) {
 		c.users.Remove(u)
 		c.out <- Msg{
 			u,
-			fmt.Sprintf(":%s!%s@%s PART %s :%s", u.nickname,
-				u.username, u.hostname, c.name, argv[1]),
+			fmt.Sprintf(":%s!%s@%s PART %s %s", u.nickname,
+				u.username, u.hostname, c.name, partMsg),
 		}
 
-		u.out <- fmt.Sprintf(":%s!%s@%s PART %s :%s", u.nickname,
-			u.username, u.hostname, c.name, argv[1])
+		u.out <- fmt.Sprintf(":%s!%s@%s PART %s %s", u.nickname,
+			u.username, u.hostname, c.name, partMsg)
 
 		//elimino el canal del usuario
-		u.channels.Lock()
-		delete(u.channels.s, str)
-		u.channels.Unlock()
-	}
+		u.channels.Remove(c)
 
+		if len(c.users.s) == 0 {
+			server.channels.Remove(c)
+		}
+	}
 }
 
 func QuitHandler(u *User, prefix string, args string) {
@@ -299,11 +302,61 @@ func QuitHandler(u *User, prefix string, args string) {
 	for _, c := range u.channels.s {
 		c.out <- Msg{u,
 			fmt.Sprintf(":%s!%s@%s QUIT %s :%s", u.nickname,
-				u.username, u.hostname, msg),
+				u.username, u.hostname, u.nickname, msg),
 		}
 		u.out <- fmt.Sprintf(":%s!%s@%s ERROR :Closing Link: %s (Quit: %s)",
 			u.nickname, u.username, u.hostname, u.hostname, msg)
 	}
 	u.channels.RUnlock()
+	return
+}
+
+func TopicHandler(u *User, prefix string, args string) {
+	argv := strings.Split(args, " ")
+
+	if len(argv) == 0 {
+		Replay(u.out, server.Hostname, "ERR_NEEDMOREPARAMS", u.nickname, "TOPIC")
+		return
+	}
+
+	str := strings.Trim(argv[0], " ")
+	c, ok := server.channels.Get(str)
+	if !ok {
+		Replay(u.out, server.Hostname, "ERR_NOSUCHCHANNEL", u.nickname, str)
+		return
+	}
+
+	_, ok = u.channels.Get(str)
+	if !ok {
+		Replay(u.out, server.Hostname, "ERR_NOTONCHANNEL", u.nickname, str)
+		return
+	}
+
+	log.Println(len(argv), c.topic)
+	if len(argv) == 1 {
+		if len(c.topic) != 0 {
+			Replay(u.out, server.Hostname, "RPL_TOPIC", c.topicuser, c.name, c.topic)
+		} else {
+			Replay(u.out, server.Hostname, "RPL_NOTOPIC", c.name)
+		}
+
+		return
+	} else if len(argv) == 2 && argv[1] == ":" {
+		c.topic = ""
+		c.topicuser = u.nickname
+		Replay(u.out, server.Hostname, "RPL_NOTOPIC", c.name)
+	} else {
+		topic := strings.Trim(argv[1], " :")
+		c.topic = topic
+		c.topicuser = u.nickname
+		Replay(u.out, server.Hostname, "RPL_TOPIC", c.name, c.topic)
+	}
+
+	c.out <- Msg{
+		u,
+		fmt.Sprintf(":%s!%s@%s TOPIC %s :%s", u.nickname,
+			u.username, u.hostname, c.name, c.topic),
+	}
+
 	return
 }

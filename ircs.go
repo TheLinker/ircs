@@ -2,15 +2,14 @@ package main
 
 import (
 	"bufio"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net"
+	"os"
 	"strings"
 	"time"
 )
-
-var Users UsersSet
-var Channels ChannelsSet
 
 func parseCommand(message string, u *User) {
 	var prefix, command, argv string
@@ -37,7 +36,7 @@ func parseCommand(message string, u *User) {
 		if u.status >= handler.minConStatus {
 			handler.handler(u, prefix, argv)
 		} else {
-			Replay(u.out, server.hostname,
+			Replay(u.out, server.Hostname,
 				"ERR_NOTREGISTERED", u.nickname)
 		}
 	} else {
@@ -66,15 +65,14 @@ func listenClient(u *User) {
 }
 
 func removeUser(u *User) {
-	// removes user from global channels' set
-	Channels.RLock()
-	for _, c := range Channels.s {
+	server.channels.RLock()
+	for _, c := range server.channels.s {
 		c.users.Remove(u)
 	}
-	Channels.RUnlock()
+	server.channels.RUnlock()
 
 	// removes user from global users set
-	Users.Remove(u)
+	server.users.Remove(u)
 
 	// send messages to user channels
 	u.channels.RLock()
@@ -140,20 +138,34 @@ func sendtoClient(u *User) {
 }
 
 func main() {
-	Users.Init()
-	Channels.Init()
-
-	server.created = time.Now().Format("2006/01/02 15:04:05")
+	server.Created = time.Now().Format("2006/01/02 15:04:05")
 	//llenar con configfile, pero bueh
-	server.hostname = "bayerl.com.ar"
-	server.name = "MyIRCServer"
-	server.version = "0.0.0.0.0.0.0.1"
+	server.Hostname = "bayerl.com.ar"
+	server.Name = "MyIRCServer"
+	server.Version = "0.0.0.0.0.0.0.1"
+	server.ListenAddr = ":2000"
 
-	// Listen on TCP port 2000 on all interfaces.
-	l, err := net.Listen("tcp", ":2000")
+	file, err := os.Open("conf.json")
+	if err != nil {
+		fmt.Println("error:", err)
+		return
+	}
+
+	decoder := json.NewDecoder(file)
+	err = decoder.Decode(&server)
+	if err != nil {
+		fmt.Println("error:", err)
+		return
+	}
+
+	server.users.Init()
+	server.channels.Init()
+
+	l, err := net.Listen("tcp", server.ListenAddr)
 	if err != nil {
 		log.Fatal(err)
 	}
+	log.Println(fmt.Sprintf("Server %s listening on: %s", server.Name, server.ListenAddr))
 	defer l.Close()
 
 	for {
@@ -161,20 +173,15 @@ func main() {
 		if err != nil {
 			log.Fatal(err)
 		}
+		conn.SetDeadline(time.Now().Add(time.Second * 30))
 
 		user := new(User)
-		conn.SetDeadline(time.Now().Add(time.Second * 30))
+		user.Init()
 		user.conn = conn
-		user.out = make(chan string, 20)
-		user.channels.Init()
-		if len(server.password) == 0 {
-			user.status = CONN_PASS_OK
-		} else {
-			user.status = CONN_ESTABLISHED
-		}
+
 		log.Println("Connection from: " + conn.RemoteAddr().String())
 
-		Users.Add(user)
+		server.users.Add(user)
 
 		go sendtoClient(user)
 		go listenClient(user)
