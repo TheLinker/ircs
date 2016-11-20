@@ -332,7 +332,6 @@ func TopicHandler(u *User, prefix string, args string) {
 		return
 	}
 
-	log.Println(len(argv), c.topic)
 	if len(argv) == 1 {
 		if len(c.topic) != 0 {
 			Replay(u.out, server.Hostname, "RPL_TOPIC", c.topicuser, c.name, c.topic)
@@ -346,8 +345,8 @@ func TopicHandler(u *User, prefix string, args string) {
 		c.topicuser = u.nickname
 		Replay(u.out, server.Hostname, "RPL_NOTOPIC", c.name)
 	} else {
-		topic := strings.Trim(argv[1], " :")
-		c.topic = topic
+		topic := strings.Split(args, ":")
+		c.topic = topic[1]
 		c.topicuser = u.nickname
 		Replay(u.out, server.Hostname, "RPL_TOPIC", c.name, c.topic)
 	}
