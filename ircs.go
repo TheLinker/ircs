@@ -11,11 +11,11 @@ import (
 	"time"
 )
 
-func parseCommand(message string, u *User) {
+func parseCommand(message string, u *User) bool {
 	var prefix, command, argv string
 
 	if len(message) == 0 {
-		return
+		return false
 	}
 	if message[0] == ':' {
 		//estan mandando prefix
@@ -42,6 +42,7 @@ func parseCommand(message string, u *User) {
 	} else {
 		log.Println("Command not found: " + command)
 	}
+	return command == "QUIT"
 }
 
 func listenClient(u *User) {
@@ -58,7 +59,9 @@ func listenClient(u *User) {
 			log.Println(u.nickname + "\t-> " + msg)
 		}
 		u.conn.SetDeadline(time.Now().Add(time.Second * 30))
-		parseCommand(msg, u)
+		if parseCommand(msg, u) {
+			break
+		}
 	}
 	log.Println("Removing user: ", u.nickname)
 	removeUser(u)
